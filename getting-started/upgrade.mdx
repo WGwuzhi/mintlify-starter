@@ -1,23 +1,38 @@
 ---
 title: "升级 autClaw"
-description: "更新 Docker 镜像或使用 autClaw 在线更新时需要注意的事项。"
+description: "通过系统右上角或 IM 渠道命令在线升级 autClaw。"
 icon: "rotate"
 ---
 
-## 更新 Docker 镜像
+## 推荐方式：系统右上角更新
 
-```bash
-docker pull nolan1121953/autclaw:latest
-docker rm -f autclaw
+1. 打开 autClaw 网页。
+2. 点击右上角的 **系统升级**。
+3. 选择要升级的版本。
+4. 点击 **在线升级**。
+5. 按页面提示重启生效。
 
-docker run -d \
-  --name autclaw \
-  --restart unless-stopped \
-  --network bridge \
-  -p 8200:8200 \
-  -v /opt/autclaw:/opt/autclaw \
-  nolan1121953/autclaw:latest
+日常升级 autClaw 不需要重新拉取 Docker 镜像，也不需要删除并重建容器。Docker 镜像只是 runtime 基座，应用升级由 autClaw 主进程完成。
+
+## IM 渠道更新命令
+
+在已经接入的 IM 渠道中，管理员可以发送：
+
+```text
+更新
 ```
+
+也可以发送：
+
+```text
+update
+```
+
+系统会检查最新版本、下载升级包，并在准备完成后提示你确认重启。
+
+<Note>
+  `更新` / `update` 是管理员命令。普通用户发送不会触发系统升级。
+</Note>
 
 ## 更新不会覆盖什么
 
