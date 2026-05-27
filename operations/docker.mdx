@@ -1,6 +1,6 @@
 ---
 title: "Docker 运维命令"
-description: "查看日志、重启、删除和更新 autClaw 容器。"
+description: "查看日志、重启、删除和更新 autClaw bridge 网络容器。"
 icon: "container"
 ---
 
@@ -24,7 +24,8 @@ docker rm -f autclaw
 docker run -d \
   --name autclaw \
   --restart unless-stopped \
-  --network host \
+  --network bridge \
+  -p 8200:8200 \
   -v /opt/autclaw:/opt/autclaw \
   nolan1121953/autclaw:latest
 ```
@@ -32,7 +33,7 @@ docker run -d \
 ## 使用 docker compose
 
 ```bash
-AUTCLAW_HOST_DATA_DIR=/opt/autclaw docker compose up -d
+AUTCLAW_HOST_DATA_DIR=/opt/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
 ```
 
 可选环境变量：
@@ -40,4 +41,17 @@ AUTCLAW_HOST_DATA_DIR=/opt/autclaw docker compose up -d
 | 变量 | 说明 |
 |---|---|
 | `AUTCLAW_HOST_DATA_DIR` | 宿主机持久化目录，默认建议 `/opt/autclaw`。 |
+| `AUTCLAW_HTTP_PORT` | 宿主机访问端口，默认 `8200`。 |
 | `AUTCLAW_IMAGE` | 自定义镜像，默认 `nolan1121953/autclaw:latest`。 |
+
+## 飞牛 OS compose 示例
+
+```bash
+AUTCLAW_HOST_DATA_DIR=/vol1/1000/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
+```
+
+## 群晖 compose 示例
+
+```bash
+AUTCLAW_HOST_DATA_DIR=/volume1/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
+```

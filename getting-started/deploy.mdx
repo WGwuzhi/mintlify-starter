@@ -1,22 +1,25 @@
 ---
 title: "部署 autClaw"
-description: "使用 Docker 在 Linux 主机上启动 autClaw。"
+description: "使用 Docker bridge 网络在 Linux、飞牛 OS 或群晖上启动 autClaw。"
 icon: "rocket"
 ---
 
 ## 准备
 
-- 一台 Linux 主机。
 - 已安装 Docker。
-- 宿主机持久化目录使用 `/opt/autclaw`。
+- 确认宿主机 `8200` 端口未被占用。
+- 准备一个持久化目录，用来保存数据、插件和运行时依赖。
 
-## 启动容器
+## Linux 通用部署
+
+默认使用 Docker bridge 网络，并把容器 `8200` 端口映射到宿主机 `8200`。
 
 ```bash
 docker run -d \
   --name autclaw \
   --restart unless-stopped \
-  --network host \
+  --network bridge \
+  -p 8200:8200 \
   -v /opt/autclaw:/opt/autclaw \
   nolan1121953/autclaw:latest
 ```
@@ -24,10 +27,60 @@ docker run -d \
 启动后访问：
 
 ```text
+http://服务器IP:8200
+```
+
+如果你在本机部署，也可以访问：
+
+```text
 http://localhost:8200
 ```
 
-如果你在远程服务器部署，请把 `localhost` 换成服务器地址。
+## 飞牛 OS 部署
+
+通过 SSH 登录飞牛 OS 后执行。飞牛 OS 常见 Docker 配置目录为 `/vol1/1000/docker`；如果你的存储空间或用户编号不同，请替换命令左侧的宿主机路径。
+
+```bash
+sudo mkdir -p /vol1/1000/docker/autclaw
+sudo docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /vol1/1000/docker/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+启动后访问：
+
+```text
+http://飞牛OS_IP:8200
+```
+
+## 群晖 DSM / Container Manager 部署
+
+通过 SSH 登录群晖后执行。常见持久化目录为 `/volume1/docker/autclaw`；如果你的共享文件夹在其他存储池，请替换为实际路径。
+
+```bash
+sudo mkdir -p /volume1/docker/autclaw
+sudo docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /volume1/docker/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+启动后访问：
+
+```text
+http://群晖_IP:8200
+```
+
+<Note>
+  如果你想换端口，例如宿主机 `18200` 映射到容器 `8200`，把 `-p 8200:8200` 改成 `-p 18200:8200`。
+</Note>
 
 ## 查看日志
 
@@ -43,11 +96,12 @@ docker rm -f autclaw
 docker run -d \
   --name autclaw \
   --restart unless-stopped \
-  --network host \
+  --network bridge \
+  -p 8200:8200 \
   -v /opt/autclaw:/opt/autclaw \
   nolan1121953/autclaw:latest
 ```
 
 <Warning>
-  不要删除 `/opt/autclaw`，除非你明确要清空数据、插件和运行时依赖。
+  不要删除 `/opt/autclaw`、`/vol1/1000/docker/autclaw` 或 `/volume1/docker/autclaw`，除非你明确要清空数据、插件和运行时依赖。
 </Warning>

@@ -13,7 +13,8 @@ docker rm -f autclaw
 docker run -d \
   --name autclaw \
   --restart unless-stopped \
-  --network host \
+  --network bridge \
+  -p 8200:8200 \
   -v /opt/autclaw:/opt/autclaw \
   nolan1121953/autclaw:latest
 ```
