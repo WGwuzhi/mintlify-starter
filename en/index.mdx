@@ -1,0 +1,43 @@
+---
+title: "autClaw docs"
+description: "Deploy autClaw, manage the runtime, and build JavaScript or Python plugins."
+icon: "bot"
+---
+
+autClaw is built for Linux and Docker production environments. The Docker image provides a stable runtime base. By default, the app, frontend assets, plugin directory, and runtime dependencies are persisted under `/opt/autclaw`.
+
+<CardGroup cols={2}>
+  <Card title="Deploy autClaw" icon="rocket" href="/en/getting-started/deploy">
+    Start the official Docker image and open `http://SERVER_IP:8200`.
+  </Card>
+  <Card title="Upgrade and restart" icon="rotate" href="/en/getting-started/upgrade">
+    Use online updates or pull a new image without losing the runtime directory.
+  </Card>
+  <Card title="Plugin SDK" icon="puzzle" href="/en/plugin-sdk/overview">
+    Write JavaScript or Python plugins that read message context and send replies.
+  </Card>
+  <Card title="Media sending" icon="image" href="/en/plugin-sdk/media">
+    Send images, voice, video, files, and mixed messages.
+  </Card>
+</CardGroup>
+
+## Common commands
+
+```bash
+# Start
+docker run -d --name autclaw --restart unless-stopped --network bridge \
+  -p 8200:8200 \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+
+# View logs
+docker logs -f autclaw
+
+# Upgrade autClaw
+# Open "System upgrade" in the top-right corner of the web app,
+# or send this command in an IM channel: update
+```
+
+<Note>
+  autClaw currently targets Linux package execution and Docker + Linux package execution. Windows is not supported.
+</Note>

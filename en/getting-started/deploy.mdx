@@ -1,0 +1,79 @@
+---
+title: "Deploy autClaw"
+description: "Start autClaw with Docker bridge networking on Linux, FNOS, or Synology DSM."
+icon: "rocket"
+---
+
+## Prepare
+
+- Install Docker.
+- Make sure host port `8200` is available.
+- Prepare a persistent directory for data, plugins, and runtime dependencies.
+
+## Deploy on Linux
+
+Use Docker bridge networking by default and map container port `8200` to host port `8200`.
+
+```bash
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+After startup, open:
+
+```text
+http://SERVER_IP:8200
+```
+
+If you deploy locally, you can also open:
+
+```text
+http://localhost:8200
+```
+
+## Deploy on FNOS
+
+SSH into FNOS and run the command below. A common Docker config directory on FNOS is `/vol1/1000/docker`. If your storage pool or user ID is different, replace the host path on the left side of `-v`.
+
+```bash
+sudo mkdir -p /vol1/1000/docker/autclaw
+sudo docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /vol1/1000/docker/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+After startup, open:
+
+```text
+http://FNOS_IP:8200
+```
+
+## Deploy on Synology DSM / Container Manager
+
+SSH into Synology and run the command below. A common persistent directory is `/volume1/docker/autclaw`. If your shared folder is on another storage pool, replace it with the actual path.
+
+```bash
+sudo mkdir -p /volume1/docker/autclaw
+sudo docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /volume1/docker/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+After startup, open:
+
+```text
+http://SYNOLOGY_IP:8200
+```

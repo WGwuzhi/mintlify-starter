@@ -1,0 +1,15 @@
+---
+title: "Chromium CJK environment"
+description: "Install Chinese fonts and locale for screenshots and browser scripts when running release artifacts directly."
+icon: "languages"
+---
+
+If you do not use Docker and run a release or build artifact directly, browser scripts, screenshots, and `chromedp` tasks depend on the host for Chromium language packs, CJK fonts, and the `zh_CN.UTF-8` locale.
+
+## Install on Debian / Ubuntu
+
+```bash
+sudo bash -lc 'set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends chromium chromium-l10n locales fonts-noto-cjk fonts-noto-color-emoji fonts-wqy-zenhei; sed -i "s/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/" /etc/locale.gen; grep -q "^zh_CN.UTF-8 UTF-8$" /etc/locale.gen || echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen; locale-gen zh_CN.UTF-8; install -d /usr/local/bin; printf "%s\n" "#!/usr/bin/env bash" "set -euo pipefail" "export LANG=zh_CN.UTF-8" "export LC_ALL=zh_CN.UTF-8" "export LANGUAGE=zh_CN:zh" "exec /usr/bin/chromium --lang=zh-CN \"\$@\"" > /usr/local/bin/chromium; cp /usr/local/bin/chromium /usr/local/bin/chromium-browser; chmod 755 /usr/local/bin/chromium /usr/local/bin/chromium-browser; fc-cache -f'
+```
+
+After installation, restart any manually started Chromium / Chrome debugging process. If autClaw is already running, restart autClaw as well.

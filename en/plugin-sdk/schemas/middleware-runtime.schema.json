@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autclaw.local/schemas/middleware-runtime.schema.json",
+  "title": "autClaw plugin middleware runtime payloads",
+  "description": "Common request and response shapes used by plugin/scripts/middleware.js and plugin/scripts/middleware.py. These are plugin-facing contracts, not a public HTTP API.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sendReceipt": { "$ref": "#/$defs/sendReceipt" },
+    "mediaItem": { "$ref": "#/$defs/mediaItem" },
+    "mediaOptions": { "$ref": "#/$defs/mediaOptions" },
+    "fileDownloadResult": { "$ref": "#/$defs/fileDownloadResult" },
+    "groupMemberListResult": { "$ref": "#/$defs/groupMemberListResult" },
+    "routerContext": { "$ref": "#/$defs/routerContext" },
+    "waitPaySuccess": { "$ref": "#/$defs/waitPaySuccess" }
+  },
+  "$defs": {
+    "sendReceipt": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ok": { "type": "boolean" },
+        "message_id": { "type": "string" },
+        "messageid": { "type": "string" },
+        "message_ids": { "type": "array", "items": { "type": "string" } },
+        "raw": true,
+        "error": { "type": "string" },
+        "action": { "type": "string" }
+      },
+      "required": ["ok"]
+    },
+    "targetOptions": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "imType": { "type": "string" },
+        "imtype": { "type": "string" },
+        "im_type": { "type": "string" },
+        "accountID": { "type": "string" },
+        "accountId": { "type": "string" },
+        "account_id": { "type": "string" },
+        "sessionType": { "type": "string" },
+        "userID": { "type": "string" },
+        "userId": { "type": "string" },
+        "user_id": { "type": "string" },
+        "groupID": { "type": "string" },
+        "groupId": { "type": "string" },
+        "group_id": { "type": "string" },
+        "chatID": { "type": "string" },
+        "chatId": { "type": "string" },
+        "chat_id": { "type": "string" }
+      }
+    },
+    "mediaOptions": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "caption": { "type": "string" },
+        "filename": { "type": "string" },
+        "fileName": { "type": "string" },
+        "file_name": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "mime_type": { "type": "string" },
+        "cover": { "type": "string" },
+        "target": { "$ref": "#/$defs/targetOptions" },
+        "constraints": { "type": "object" },
+        "options": { "type": "object" },
+        "timeout": { "type": "number" }
+      }
+    },
+    "mediaItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "examples": ["text", "markdown", "image", "voice", "video", "file"]
+        },
+        "text": { "type": "string" },
+        "source": { "type": "string" },
+        "url": { "type": "string" },
+        "path": { "type": "string" },
+        "file": { "type": "string" },
+        "name": { "type": "string" },
+        "file_name": { "type": "string" },
+        "filename": { "type": "string" },
+        "mime_type": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "caption": { "type": "string" },
+        "cover": { "type": "string" },
+        "platform_payload": { "type": "object" }
+      },
+      "required": ["type"]
+    },
+    "fileDownloadResult": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "path": { "type": "string" },
+        "file_path": { "type": "string" },
+        "file_name": { "type": "string" },
+        "mime_type": { "type": "string" },
+        "file_size": { "type": "number" },
+        "ok": { "type": "boolean" },
+        "url": { "type": "string" },
+        "action": { "type": "string" }
+      },
+      "required": ["path", "file_path", "file_name"]
+    },
+    "groupMember": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "group_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nickname": { "type": "string" },
+        "card": { "type": "string" },
+        "display_name": { "type": "string" },
+        "sex": { "type": "string" },
+        "age": { "type": "number" },
+        "area": { "type": "string" },
+        "join_time": { "type": "number" },
+        "last_sent_time": { "type": "number" },
+        "level": { "type": "string" },
+        "role": { "type": "string" },
+        "unfriendly": { "type": "boolean" },
+        "title": { "type": "string" },
+        "title_expire_time": { "type": "number" },
+        "card_changeable": { "type": "boolean" },
+        "shut_up_timestamp": { "type": "number" },
+        "raw": true
+      }
+    },
+    "groupMemberListResult": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ok": { "type": "boolean" },
+        "im_type": { "type": "string" },
+        "account_id": { "type": "string" },
+        "group_id": { "type": "string" },
+        "members": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/groupMember" }
+        },
+        "raw": true
+      },
+      "required": ["ok", "group_id", "members"]
+    },
+    "routerContext": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "router_path": { "type": "string" },
+        "router_params": { "type": "object", "additionalProperties": { "type": "string" } },
+        "router_method": { "type": "string" },
+        "router_headers": { "type": "object" },
+        "router_cookies": { "type": "object" },
+        "router_body": true
+      }
+    },
+    "waitPaySuccess": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "money": { "type": ["string", "number"] },
+        "Money": { "type": ["string", "number"] },
+        "order_id": { "type": "string" },
+        "orderID": { "type": "string" },
+        "trade_no": { "type": "string" }
+      }
+    }
+  }
+}

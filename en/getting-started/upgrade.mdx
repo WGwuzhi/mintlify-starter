@@ -1,0 +1,62 @@
+---
+title: "Upgrade autClaw"
+description: "Upgrade autClaw from the top-right system menu or with an IM command."
+icon: "rotate"
+---
+
+## Recommended: update from the web app
+
+1. Open the autClaw web app.
+2. Click **System upgrade** in the top-right corner.
+3. Select the version you want to install.
+4. Click **Online upgrade**.
+5. Restart when the page tells you to.
+
+For daily autClaw upgrades, you usually do not need to pull a new Docker image or recreate the container. The Docker image is the runtime base. The autClaw main process handles application upgrades.
+
+## Update from an IM channel
+
+In a connected IM channel, an administrator can send:
+
+```text
+更新
+```
+
+or:
+
+```text
+update
+```
+
+The system checks the latest version, downloads the upgrade bundle, and asks you to confirm the restart when it is ready.
+
+<Note>
+  `更新` / `update` are administrator commands. Regular users cannot trigger system upgrades with them.
+</Note>
+
+## What updates do not overwrite
+
+Release bundles, Docker first-run downloads, and online upgrades only overwrite baseline system middleware files.
+
+They do not overwrite:
+
+- Your own `plugin/adapters/`
+- Your own `plugin/replies/`
+- Your regular `plugin/scripts/`
+- The database and runtime dependency directories
+
+## Middleware files that can be overwritten
+
+```text
+plugin/scripts/middleware.js
+plugin/scripts/middleware.py
+plugin/scripts/middleware_ql.js
+plugin/scripts/middleware_ql.py
+plugin/scripts/middleware_dd.js
+plugin/scripts/middleware_dd.py
+plugin/scripts/middleware/middleware.go
+```
+
+<Note>
+  The default online update source and first-run release bundle target both point to `WGwuzhi/autClaw`.
+</Note>

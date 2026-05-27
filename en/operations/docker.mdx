@@ -1,0 +1,57 @@
+---
+title: "Docker operations"
+description: "View logs, restart, remove, and update the autClaw bridge network container."
+icon: "container"
+---
+
+## View logs
+
+```bash
+docker logs -f autclaw
+```
+
+## Stop and remove the container
+
+```bash
+docker rm -f autclaw
+```
+
+## Update to the latest image
+
+```bash
+docker pull nolan1121953/autclaw:latest
+docker rm -f autclaw
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+## Use Docker Compose
+
+```bash
+AUTCLAW_HOST_DATA_DIR=/opt/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
+```
+
+Optional environment variables:
+
+| Variable | Description |
+|---|---|
+| `AUTCLAW_HOST_DATA_DIR` | Host persistent directory. `/opt/autclaw` is recommended by default. |
+| `AUTCLAW_HTTP_PORT` | Host access port. Defaults to `8200`. |
+| `AUTCLAW_IMAGE` | Custom image. Defaults to `nolan1121953/autclaw:latest`. |
+
+## FNOS compose example
+
+```bash
+AUTCLAW_HOST_DATA_DIR=/vol1/1000/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
+```
+
+## Synology compose example
+
+```bash
+AUTCLAW_HOST_DATA_DIR=/volume1/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
+```

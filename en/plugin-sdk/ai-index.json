@@ -2,12 +2,12 @@
   "name": "autClaw Plugin SDK Reference",
   "version": "1.0.0",
   "purpose": "Static index for AI assistants and future read-only MCP tools that need autClaw plugin development contracts.",
-  "default_entry": "plugin-sdk/overview.mdx",
+  "default_entry": "en/plugin-sdk/overview.mdx",
   "entries": [
     {
       "id": "overview",
       "title": "Plugin SDK overview",
-      "path": "plugin-sdk/overview.mdx",
+      "path": "en/plugin-sdk/overview.mdx",
       "topics": [
         "plugin",
         "sdk",
@@ -18,7 +18,7 @@
     {
       "id": "middleware-js",
       "title": "JavaScript middleware reference",
-      "path": "plugin-sdk/javascript.mdx",
+      "path": "en/plugin-sdk/javascript.mdx",
       "topics": [
         "middleware.js",
         "Sender",
@@ -33,7 +33,7 @@
     {
       "id": "middleware-python",
       "title": "Python middleware reference",
-      "path": "plugin-sdk/python.mdx",
+      "path": "en/plugin-sdk/python.mdx",
       "topics": [
         "middleware.py",
         "Sender",
@@ -49,7 +49,7 @@
     {
       "id": "plugin-manifest",
       "title": "Plugin manifest header reference",
-      "path": "plugin-sdk/manifest.mdx",
+      "path": "en/plugin-sdk/manifest.mdx",
       "topics": [
         "manifest",
         "header",
@@ -65,7 +65,7 @@
     {
       "id": "media",
       "title": "Plugin media middleware behavior",
-      "path": "plugin-sdk/media.mdx",
+      "path": "en/plugin-sdk/media.mdx",
       "topics": [
         "sendImage",
         "sendVoice",
@@ -78,7 +78,7 @@
     {
       "id": "mcp-ready",
       "title": "MCP-ready retrieval plan",
-      "path": "plugin-sdk/ai.mdx",
+      "path": "en/plugin-sdk/ai.mdx",
       "topics": [
         "mcp",
         "search",
@@ -90,7 +90,7 @@
     {
       "id": "middleware-types",
       "title": "TypeScript declarations for middleware.js",
-      "path": "plugin-sdk/types/middleware-js.d.ts",
+      "path": "en/plugin-sdk/types/middleware-js.d.ts",
       "topics": [
         "types",
         "typescript",
@@ -101,7 +101,7 @@
     {
       "id": "manifest-schema",
       "title": "Plugin manifest JSON schema",
-      "path": "plugin-sdk/schemas/plugin-manifest.schema.json",
+      "path": "en/plugin-sdk/schemas/plugin-manifest.schema.json",
       "topics": [
         "schema",
         "manifest",
@@ -112,7 +112,7 @@
     {
       "id": "runtime-schema",
       "title": "Middleware runtime payload JSON schema",
-      "path": "plugin-sdk/schemas/middleware-runtime.schema.json",
+      "path": "en/plugin-sdk/schemas/middleware-runtime.schema.json",
       "topics": [
         "schema",
         "runtime",

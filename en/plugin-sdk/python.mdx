@@ -1,0 +1,435 @@
+---
+title: "Python middleware reference"
+description: "Read context, reply to messages, send media, store data, handle routes, and manage scheduled tasks in Python plugins."
+---
+
+`plugin/scripts/middleware.py` is the SDK for regular Python plugins. Use it to create `Sender`, read message context, reply with text or media, store data, download files, wait for user input, and manage scheduled tasks.
+
+<Note>
+  New plugins should prefer `from middleware import Sender, getSenderID`. Do not hard-code credentials, ports, or service addresses in plugins.
+</Note>
+
+## Quick start
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Echo]
+#[rule: echo (.+)]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+text = sender.param(1)
+sender.reply(text or "Please enter text")
+```
+
+Python SDK methods are synchronous. Failures raise `Exception`; catch exceptions in critical flows and reply with an actionable message.
+
+## Imports
+
+```python
+from middleware import (
+    Sender,
+    Cron,
+    getSenderID,
+    bucketGet,
+    bucketSet,
+    fileDownload,
+    downloadAdapterFile,
+    import_module,
+)
+
+sender = Sender(getSenderID())
+```
+
+Common rules:
+
+- Use `Sender` to handle the current message, route request, or event.
+- Use top-level functions for global operations, such as `bucketGet(...)`, `pushImage(...)`, and `fileDownload(...)`.
+- Business timeout parameters for `listen`, `input`, and `waitPay` use milliseconds.
+
+## Common return values
+
+### SendReceipt
+
+Text, media, and recall methods usually return a send receipt.
+
+```json
+{
+  "ok": true,
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
+  "raw": {},
+  "action": "sendText"
+}
+```
+
+Adapters may return extra fields. When checking failures, first check `receipt.get("ok") is False`. Message IDs may appear as either `message_id` or `messageid`.
+
+### FileDownloadResult
+
+`fileDownload(...)` and `downloadAdapterFile(...)` return local file information.
+
+```json
+{
+  "path": "/opt/autclaw/file/demo.png",
+  "file_path": "/opt/autclaw/file/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
+}
+```
+
+### MediaItem
+
+`sender.getMediaItems()` returns media items from the current event or the latest `listen/input` result.
+
+```python
+{
+    "type": "file",
+    "source": "...",
+    "name": "report.csv",
+    "mime_type": "text/csv",
+}
+```
+
+Pass user-uploaded file items to `downloadAdapterFile(...)`. Do not parse platform-specific raw fields manually.
+
+## Sender
+
+Create a `Sender`:
+
+```python
+sender = Sender(getSenderID())
+```
+
+### Read message context
+
+| Method | Returns | Description |
+|---|---|---|
+| `getImtype()` | `str` | Current IM type. |
+| `getUserID()` | `str` | Current user ID. |
+| `getUserName()` | `str` | Current user display name. |
+| `getUserAvatarUrl()` | `str` | Current user avatar URL. |
+| `getChatID()` | `str` | Current chat ID. |
+| `getChatName()` | `str` | Current chat name. |
+| `getGroupName()` | `str` | Group name. Same as the chat name. |
+| `isAdmin()` | `bool` | Whether the current user is an administrator. |
+| `isAI()` | `bool` | Whether the current message came from an AI trigger context. |
+| `getAIParam()` | `str` | AI parameter. |
+| `getMessage()` | `str` | Current message text. |
+| `getMessageID()` | `str` | Current message ID. |
+| `getHistoryMessageIDs(number)` | `list[str]` | Recent message IDs. |
+| `param(i)` | `str` | Read a `rule` regex capture. `i` starts at `1`. |
+
+```python
+user = sender.getUserName()
+message = sender.getMessage()
+sender.reply(f"{user} sent: {message}")
+```
+
+### Reply with text and media
+
+```python
+sender.reply("Plain text")
+sender.replyMarkdown("# Title")
+sender.replyImage("https://example.com/a.png")
+sender.replyVoice("./voice.wav")
+sender.replyVideo("./demo.mp4")
+sender.replyFile("./report.csv", {"file_name": "report.csv"})
+sender.replyMixed([
+    {"type": "text", "text": "Result: "},
+    {"type": "image", "source": "./result.png"},
+])
+```
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `reply(text)` | `str` | `SendReceipt` |
+| `replyMarkdown(markdown)` | `str` | `SendReceipt` |
+| `replyImage(source, options=None)` | Media source | `SendReceipt` |
+| `replyVoice(source, options=None)` | Media source | `SendReceipt` |
+| `replyVideo(source, options=None)` | Media source | `SendReceipt` |
+| `replyFile(source, options=None)` | Media source | `SendReceipt` |
+| `replyMixed(items, options=None)` | Mixed item list | `SendReceipt` |
+| `returnValue(text)` | `str` | Runtime result |
+
+See [`Media sending`](/en/plugin-sdk/media) for media sources and mixed item syntax.
+
+### Control flow
+
+| Method | Parameters | Description |
+|---|---|---|
+| `setContinue()` | None | Continue matching subsequent plugins. |
+| `recallMessage(messageid)` | Message ID | Recall a message. |
+| `breakIn(content)` | Text | Re-enter the message pipeline with new text. |
+
+```python
+if sender.isAdmin():
+    sender.setContinue()
+```
+
+### Wait for input and payment
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `listen(waitTime, recallTime=0, scope="")` | Wait milliseconds, optional recall milliseconds, optional `group` | User input, event object, or timeout marker. |
+| `input(waitTime, recallTime=0, scope="")` | Same as `listen` | User input, event object, or timeout marker. |
+| `waitPay(exitcode, timeout, amount=None)` | Order identifier, timeout milliseconds, optional amount | `timeout`, `busy`, or payment success object. |
+| `atWaitPay()` | None | `bool` |
+
+```python
+sender.reply("Send the verification code within 60 seconds")
+code = sender.input(60000)
+sender.reply(f"Received: {code}")
+```
+
+To allow any member in the same group to answer, set the third parameter to `"group"`:
+
+```python
+answer = sender.input(60000, 0, "group")
+```
+
+`listen(60000, "group")` also treats the second string parameter as the scope.
+
+### Events and media items
+
+| Method | Returns | Description |
+|---|---|---|
+| `getPluginName()` | `str` | Current plugin name. |
+| `getPluginVersion()` | `str` | Current plugin version. |
+| `getEventType()` | `str` | Current event type. |
+| `setEventType(eventType)` | Runtime result | Set the event type. |
+| `getEventData()` | JSON-like | Current event data. |
+| `setEventData(eventData)` | Runtime result | Set event data. |
+| `getMediaItems()` | `list[dict]` | Media from the current event or latest waited input. |
+
+```python
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+```
+
+### HTTP route requests
+
+After declaring `router` and `method` in the manifest, use these methods to read the request and respond.
+
+```python
+#[router: /demo/{id}]
+#[method: post]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+params = sender.getRouterParams()
+body = sender.getRouterBody()
+sender.response({"ok": True, "id": params.get("id"), "body": body})
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getRouterPath()` | `str` | Current route path. |
+| `getRouterParams()` | `dict` | Route parameters. |
+| `getRouterMethod()` | `str` | Request method. |
+| `getRouterHeaders()` | `dict` | Request headers. |
+| `getRouterCookies()` | `dict` | Cookies. |
+| `getRouterBody()` | JSON-like | Request body. |
+| `response(data)` | Runtime result | Return JSON data. |
+
+Python currently uses `getRouterPath()`, `getRouterMethod()`, and `getRouterBody()`. Do not copy JavaScript aliases like `getRouter()` / `getMethod()` / `getRouterData()` into Python.
+
+## Storage
+
+### Default storage
+
+Default storage is suitable for small plugin state.
+
+```python
+set("last_user", "10001")
+user = get("last_user")
+delete("last_user")
+```
+
+| Function | Parameters | Returns |
+|---|---|---|
+| `get(key)` | `str` | `str`. Returns an empty string when missing. |
+| `set(key, value)` | Key + string value | `bool` |
+| `delete(key)` | `str` | `bool` |
+
+<Warning>
+  Storage saves `value` as a string. To store objects, call `json.dumps(...)` before saving and `json.loads(...)` after reading.
+</Warning>
+
+### Named buckets
+
+```python
+import json
+
+bucketSet("my_plugin", "config", json.dumps({"enabled": True}))
+raw = bucketGet("my_plugin", "config")
+keys = bucketAllKeys("my_plugin")
+all_values = bucketAll("my_plugin")
+```
+
+| Function / Sender method | Parameters | Returns |
+|---|---|---|
+| `bucketGet(bucket, key)` | Bucket + key | `str`. Returns an empty string when missing. |
+| `bucketSet(bucket, key, value)` | Bucket + key + string value | `bool` |
+| `bucketDel(bucket, key)` | Bucket + key | `bool` |
+| `bucketKeys(bucket=None, value=None)` | Bucket and optional value filter | `list[str]` |
+| `bucketAllKeys(bucket)` | Bucket | `list[str]` |
+| `bucketAll(bucket)` | Bucket | `dict[str, str]` |
+
+`Sender` also provides bucket methods with the same names. Use them when you want the call to be tied to the current conversation context.
+
+## Files and media utilities
+
+| Function | Parameters | Returns |
+|---|---|---|
+| `fileDownload(url, path=None)` | Download remote URL, `base64://...`, or data URI | `FileDownloadResult` |
+| `downloadAdapterFile(file, options=None, timeout=None)` | Download a user-uploaded file item | `FileDownloadResult` |
+| `download_adapter_file(...)` | Alias of `downloadAdapterFile` | `FileDownloadResult` |
+| `getGroupMemberList(group_id_or_options=None, options=None, timeout=None)` | Get the group member list | Group member list object |
+| `get_group_member_list(...)` | Alias of `getGroupMemberList` | Group member list object |
+
+```python
+downloaded = fileDownload("https://example.com/a.png", "images")
+sender.replyImage(downloaded["path"])
+
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+if file_item:
+    saved = downloadAdapterFile(file_item, {"path": "imports"})
+    sender.reply(f"Saved: {saved.get('file_name')}")
+```
+
+See [`Media sending`](/en/plugin-sdk/media) for more media details.
+
+## Proactive push
+
+Proactive push does not depend on the current `Sender`. Specify the IM type, group, and user.
+
+| Function | Parameters | Description |
+|---|---|---|
+| `push(imType, groupCode, userID, title, content)` | Target + title + text | Push text. The current helper does not return a result. |
+| `pushImage(imType, groupCode, userID, title, imageUrl)` | Target + image | Push an image. |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | Target + voice | Push voice. |
+| `pushVideo(imType, groupCode, userID, title, videoUrl)` | Target + video | Push video. |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options=None)` | Target + file | Push a file. |
+| `pushMixed(imType, groupCode, userID, title, items)` | Target + mixed items | Push a mixed message. |
+
+```python
+pushImage("qq", "123456", "", "Daily report", "./daily.png")
+```
+
+## Dependencies and utilities
+
+### import_module
+
+```python
+requests = import_module("requests", version="2.32.3", manager="pip")
+image_module = import_module("PIL.Image", package="pillow", version="10.4.0", manager="pip")
+```
+
+`import_module(module, package="", version="", manager="")` ensures the dependency is available, then returns the imported Python module. If the package name differs from the import name, use `package` to specify the real package name.
+
+### System and utility functions
+
+| Function | Returns | Description |
+|---|---|---|
+| `render(template, selector, jsondata)` | Render result | Render HTML/template, often to generate images. |
+| `getActiveImtypes()` | `list[str]` | Enabled IM types. |
+| `name()` | `str` | Bot name. |
+| `domain()` | `str` | Domain or public address. |
+| `port()` / `getPort()` | `str \| int` | Service port. |
+| `machineId()` | `str` | Machine ID. |
+| `version()` | `str` | autClaw version. |
+| `versionInfo()` | `dict` | Structured version information. |
+| `notifyMasters(content, imtypes=[])` | `bool` | Notify administrators. |
+| `coffee()` | `bool` | Coffee code activation status. |
+| `spread(msg)` | Runtime result | Promotion link conversion. |
+| `getHistoryMessages(imtype="")` | Message history list | Get recent message history. |
+| `generateFromSinglePrompt(prompt)` | `str` | Generate text from one prompt. |
+| `pip_install(module, version="")` | `None` | Ensure a pip dependency is available. |
+| `printf(message)` | `None` | Print and flush output. |
+
+<Warning>
+  The SDK keeps defaults like `imtypes=[]` for compatibility. In your own Python functions, prefer `None` as the default to avoid mutable default argument issues.
+</Warning>
+
+## Cron
+
+`Cron` manages runtime scheduled commands. It is different from manifest `cron`: manifest `cron` triggers the current plugin, while the `Cron` class adds, updates, lists, and deletes runtime scheduled commands.
+
+```python
+cron = Cron(0)
+items = cron.getCrons()
+item = cron.getCron(1)
+cron_id = cron.addCron("0 9 * * *", False, "daily reminder", True, None, "Daily reminder", "", "", "")
+cron.updateCron(cron_id, "0 10 * * *", False, "daily reminder", True, None, "Daily reminder", "", "", "")
+cron.delCron(cron_id)
+```
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `Cron(cronID)` | Compatibility constructor parameter | `Cron` instance. |
+| `getCrons()` | None | Scheduled command list. |
+| `getCronByID(id)` | ID | One scheduled command. |
+| `getCron(id)` | ID | Alias of `getCronByID`. |
+| `addCron(cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | Schedule config | New schedule ID or runtime result. |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | Update config | Runtime result. |
+| `deleteCron(id)` | ID | Runtime result. |
+| `delCron(id)` | ID | Alias of `deleteCron`. |
+
+Python `addCron` / `updateCron` require all positional parameters. Pass `None` or an empty string for fields you do not need.
+
+## Group management
+
+These methods depend on the current IM platform. Unsupported platforms may do nothing or return an error.
+
+```python
+sender.groupInviteIn(friend_id, group_id)
+sender.groupKick(user_id)
+sender.groupBan(user_id, 600)
+sender.groupUnban(user_id)
+sender.groupWholeBan()
+sender.groupWholeUnban()
+sender.groupNoticeSend("Announcement text")
+```
+
+## JavaScript differences
+
+| JavaScript | Python |
+|---|---|
+| `del(key)` | `delete(key)` |
+| `importModule(...)` | `import_module(...)` |
+| `downloadAdapterFile(...)` | `downloadAdapterFile(...)` / `download_adapter_file(...)` |
+| `getGroupMemberList(...)` | `getGroupMemberList(...)` / `get_group_member_list(...)` |
+| `sender.getRouter()` | Use `sender.getRouterPath()` |
+| `sender.getMethod()` | Use `sender.getRouterMethod()` |
+| `sender.getRouterData()` | Use `sender.getRouterBody()` |
+| `new Cron()` | `Cron(cronID)` |
+
+## Recommended template
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Safe template]
+#[rule: demo (.+)]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+try:
+    value = sender.param(1)
+    sender.reply(value or "Please enter text")
+except Exception as error:
+    print(error)
+```
+
+## Common mistakes
+
+- `sender.param(1)` starts at `1`, not `0`.
+- `set(...)` / `bucketSet(...)` store strings. Serialize objects to JSON manually.
+- Do not bypass the SDK to call autClaw services directly. Prefer the methods on this page.
+- To download user-uploaded files, use `sender.getMediaItems()` + `downloadAdapterFile(...)`.
+- Business timeouts for `listen`, `input`, and `waitPay` use milliseconds.

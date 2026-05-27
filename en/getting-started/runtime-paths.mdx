@@ -1,0 +1,43 @@
+---
+title: "Runtime directories and persistent paths"
+description: "Learn which directories autClaw uses in Docker and direct runtime modes."
+icon: "folder-tree"
+---
+
+## Docker default paths
+
+| Purpose | Path |
+|---|---|
+| Host persistent directory | `/opt/autclaw` |
+| Container runtime directory | `/opt/autclaw` |
+| Database | `/opt/autclaw/autMan.db` |
+| Frontend static assets | `/opt/autclaw/dist/` |
+| Plugin directory | `/opt/autclaw/plugin/` |
+| mise runtime | `/opt/autclaw/envs/mise` |
+| Dependency package root | `/opt/autclaw/envs/packages` |
+
+## Run a release artifact directly
+
+When you run a release artifact directly, `runtime_root` is the directory that contains the `autClaw` executable. By default, autClaw uses these paths under that directory:
+
+```text
+autMan.db
+dist/
+plugin/
+envs/mise
+envs/packages
+```
+
+## Default port
+
+When you run a normal artifact directly and do not set `HTTP_ADDR`, the backend listens on:
+
+```text
+:8200
+```
+
+The Docker image sets this explicitly:
+
+```text
+HTTP_ADDR=:8200
+```

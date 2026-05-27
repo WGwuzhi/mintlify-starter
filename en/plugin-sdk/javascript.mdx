@@ -1,0 +1,421 @@
+---
+title: "JavaScript middleware reference"
+description: "Read context, reply to messages, send media, store data, handle routes, and manage scheduled tasks in JavaScript plugins."
+---
+
+`plugin/scripts/middleware.js` is the SDK for regular JavaScript plugins. Use it to create `Sender`, read message context, reply with text or media, store data, download files, wait for user input, and manage scheduled tasks.
+
+<Note>
+  New plugins should prefer `const { Sender, getSenderID } = require('./middleware.js')`. Do not hard-code credentials, ports, or service addresses in plugins.
+</Note>
+
+## Quick start
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[title: Echo]
+//[rule: echo (.+)]
+const { Sender, getSenderID } = require('./middleware.js')
+
+async function main() {
+  const sender = new Sender(getSenderID())
+  const text = await sender.param(1)
+  await sender.reply(text || 'Please enter text')
+}
+
+main().catch((error) => console.error(error))
+```
+
+## Imports
+
+```js
+const {
+  Sender,
+  Cron,
+  getSenderID,
+  bucketGet,
+  bucketSet,
+  fileDownload,
+  downloadAdapterFile,
+  importModule,
+} = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+```
+
+Common rules:
+
+- Use `Sender` to handle the current message, route request, or event.
+- Use top-level functions for global operations, such as `bucketGet(...)`, `pushImage(...)`, and `fileDownload(...)`.
+- Most methods return a runtime result. Failures throw `Error`, so wrap critical flows in `try/catch`.
+
+## Common return values
+
+### SendReceipt
+
+Text, media, and recall methods usually return a send receipt.
+
+```json
+{
+  "ok": true,
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
+  "raw": {},
+  "action": "sendText"
+}
+```
+
+Adapters may return extra fields. When checking failures, first check `receipt.ok === false`. Message IDs may appear as either `message_id` or `messageid`.
+
+### FileDownloadResult
+
+`fileDownload(...)` and `downloadAdapterFile(...)` return local file information.
+
+```json
+{
+  "path": "/opt/autclaw/file/demo.png",
+  "file_path": "/opt/autclaw/file/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
+}
+```
+
+### MediaItem
+
+`sender.getMediaItems()` returns media items from the current event or the latest `listen/input` result.
+
+```ts
+type MediaItem = {
+  type: 'text' | 'markdown' | 'image' | 'voice' | 'video' | 'file' | string
+  text?: string
+  source?: string
+  url?: string
+  path?: string
+  file?: string
+  name?: string
+  file_name?: string
+  filename?: string
+  mime_type?: string
+  mimeType?: string
+}
+```
+
+Pass user-uploaded file items to `downloadAdapterFile(...)`. Do not parse platform-specific raw fields manually.
+
+## Sender
+
+Create a `Sender`:
+
+```js
+const sender = new Sender(getSenderID())
+```
+
+### Read message context
+
+| Method | Returns | Description |
+|---|---|---|
+| `getImtype()` | `Promise<string>` | Current IM type. |
+| `getUserID()` | `Promise<string>` | Current user ID. |
+| `getUserName()` | `Promise<string>` | Current user display name. |
+| `getUserAvatarUrl()` | `Promise<string>` | Current user avatar URL. |
+| `getChatID()` | `Promise<string>` | Current chat ID. |
+| `getChatName()` | `Promise<string>` | Current chat name. |
+| `getGroupName()` | `Promise<string>` | Group name. Same as the chat name. |
+| `isAdmin()` | `Promise<boolean>` | Whether the current user is an administrator. |
+| `isAI()` | `Promise<boolean>` | Whether the current message came from an AI trigger context. |
+| `getAIParam()` | `Promise<string>` | AI parameter. |
+| `getMessage()` | `Promise<string>` | Current message text. |
+| `getMessageID()` | `Promise<string>` | Current message ID. |
+| `getHistoryMessageIDs(number)` | `Promise<string[]>` | Recent message IDs. |
+| `param(index)` | `Promise<string>` | Read a `rule` regex capture. `index` starts at `1`. |
+
+```js
+const user = await sender.getUserName()
+const message = await sender.getMessage()
+await sender.reply(`${user} sent: ${message}`)
+```
+
+### Reply with text and media
+
+```js
+await sender.reply('Plain text')
+await sender.replyMarkdown('# Title')
+await sender.replyImage('https://example.com/a.png')
+await sender.replyVoice('./voice.wav')
+await sender.replyVideo('./demo.mp4')
+await sender.replyFile('./report.csv', { filename: 'report.csv' })
+await sender.replyMixed([
+  { type: 'text', text: 'Result: ' },
+  { type: 'image', source: './result.png' },
+])
+```
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `reply(text)` | `string` | `Promise<SendReceipt>` |
+| `replyMarkdown(markdown)` | `string` | `Promise<SendReceipt>` |
+| `replyImage(source, options?)` | Media source | `Promise<SendReceipt>` |
+| `replyVoice(source, options?)` | Media source | `Promise<SendReceipt>` |
+| `replyVideo(source, options?)` | Media source | `Promise<SendReceipt>` |
+| `replyFile(source, options?)` | Media source | `Promise<SendReceipt>` |
+| `replyMixed(items, options?)` | Mixed item array | `Promise<SendReceipt>` |
+| `returnValue(text)` | `string` | Runtime result |
+
+See [`Media sending`](/en/plugin-sdk/media) for media sources and mixed item syntax.
+
+### Control flow
+
+| Method | Parameters | Description |
+|---|---|---|
+| `setContinue()` | None | Continue matching subsequent plugins. |
+| `recallMessage(messageid)` | Message ID | Recall a message. |
+| `breakIn(content)` | Text | Re-enter the message pipeline with new text. |
+
+```js
+if (await sender.isAdmin()) {
+  await sender.setContinue()
+}
+```
+
+### Wait for input and payment
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `listen(waitTime, recallTime?, scope?)` | Wait milliseconds, optional recall milliseconds, optional `group` | User input, event object, or timeout marker. |
+| `input(waitTime, recallTime?, scope?)` | Same as `listen` | User input, event object, or timeout marker. |
+| `waitPay(exitcode, timeout, amount?)` | Order identifier, timeout milliseconds, optional amount | `timeout`, `busy`, or payment success object. |
+| `atWaitPay()` | None | Whether a payment wait is active. |
+
+```js
+await sender.reply('Send the verification code within 60 seconds')
+const code = await sender.input(60000)
+await sender.reply(`Received: ${typeof code === 'string' ? code : JSON.stringify(code)}`)
+```
+
+To allow any member in the same group to answer, set the third parameter to `'group'`:
+
+```js
+const answer = await sender.input(60000, 0, 'group')
+```
+
+`listen(waitTime, 'group')` also treats the second string parameter as the scope.
+
+### Events and media items
+
+| Method | Returns | Description |
+|---|---|---|
+| `getPluginName()` | `Promise<string>` | Current plugin name. |
+| `getPluginVersion()` | `Promise<string>` | Current plugin version. |
+| `getEventType()` | `Promise<string>` | Current event type. |
+| `setEventType(eventType)` | `Promise<boolean>` | Set the event type. |
+| `getEventData()` | `Promise<any>` | Current event data. |
+| `setEventData(eventData)` | `Promise<boolean>` | Set event data. |
+| `getMediaItems()` | `Promise<MediaItem[]>` | Media from the current event or latest waited input. |
+
+```js
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+```
+
+### HTTP route requests
+
+After declaring `router` and `method` in the manifest, use these methods to read the request and respond.
+
+```js
+//[router: /demo/{id}]
+//[method: post]
+const { Sender, getSenderID } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+const params = await sender.getRouterParams()
+const body = await sender.getRouterBody()
+await sender.response({ ok: true, id: params.id, body })
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getRouterPath()` / `getRouter()` | `Promise<string>` | Current route path. |
+| `getRouterParams()` | `Promise<Record<string, string>>` | Route parameters. |
+| `getRouterMethod()` / `getMethod()` | `Promise<string>` | Request method. |
+| `getRouterHeaders()` | `Promise<object>` | Request headers. |
+| `getRouterCookies()` | `Promise<object>` | Cookies. |
+| `getRouterBody()` | `Promise<any>` | Request body. |
+| `getRouterData()` | `Promise<string>` | Request body as JSON string. |
+| `response(data)` | `Promise<boolean>` | Return JSON data. |
+
+## Storage
+
+### Default storage
+
+Default storage is suitable for small plugin state.
+
+```js
+await set('last_user', '10001')
+const user = await get('last_user')
+await del('last_user')
+```
+
+| Function | Parameters | Returns |
+|---|---|---|
+| `get(key)` | `string` | `Promise<string>`. Returns an empty string when missing. |
+| `set(key, value)` | Key + string value | `Promise<boolean>` |
+| `del(key)` | `string` | `Promise<boolean>` |
+
+<Warning>
+  Storage saves `value` as a string. To store objects, call `JSON.stringify(...)` before saving and `JSON.parse(...)` after reading.
+</Warning>
+
+### Named buckets
+
+```js
+await bucketSet('my_plugin', 'config', JSON.stringify({ enabled: true }))
+const raw = await bucketGet('my_plugin', 'config')
+const keys = await bucketAllKeys('my_plugin')
+const all = await bucketAll('my_plugin')
+```
+
+| Function / Sender method | Parameters | Returns |
+|---|---|---|
+| `bucketGet(bucket, key)` | Bucket + key | `Promise<string>`. Returns an empty string when missing. |
+| `bucketSet(bucket, key, value)` | Bucket + key + string value | `Promise<boolean>` |
+| `bucketDel(bucket, key)` | Bucket + key | `Promise<boolean>` |
+| `bucketKeys(bucket?, value?)` | Bucket and optional value filter | `Promise<string[]>` |
+| `bucketAllKeys(bucket)` | Bucket | `Promise<string[]>` |
+| `bucketAll(bucket)` | Bucket | `Promise<Record<string, string>>` |
+
+`Sender` also provides bucket methods with the same names. Use them when you want the call to be tied to the current conversation context.
+
+## Files and media utilities
+
+| Function | Parameters | Returns |
+|---|---|---|
+| `fileDownload(url, path?)` | Download remote URL, `base64://...`, or data URI | `Promise<FileDownloadResult>` |
+| `downloadAdapterFile(file, options?, timeout?)` | Download a user-uploaded file item | `Promise<FileDownloadResult>` |
+| `getGroupMemberList(groupIDOrOptions?, options?, timeout?)` | Get the group member list | Group member list object |
+
+```js
+const downloaded = await fileDownload('https://example.com/a.png', 'images')
+await sender.replyImage(downloaded.path)
+
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+if (fileItem) {
+  const saved = await downloadAdapterFile(fileItem, { path: 'imports' })
+  await sender.reply(`Saved: ${saved.file_name}`)
+}
+```
+
+See [`Media sending`](/en/plugin-sdk/media) for more media details.
+
+## Proactive push
+
+Proactive push does not depend on the current `Sender`. Specify the IM type, group, and user.
+
+| Function | Parameters | Description |
+|---|---|---|
+| `push(imType, groupCode, userID, title, content)` | Target + title + text | Push text. The current helper does not return a result. |
+| `pushImage(imType, groupCode, userID, title, imageUrl)` | Target + image | Push an image. |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | Target + voice | Push voice. |
+| `pushVideo(imType, groupCode, userID, title, videoUrl)` | Target + video | Push video. |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options?)` | Target + file | Push a file. |
+| `pushMixed(imType, groupCode, userID, title, items)` | Target + mixed items | Push a mixed message. |
+
+```js
+await pushImage('qq', '123456', '', 'Daily report', './daily.png')
+```
+
+## Dependencies and utilities
+
+### importModule
+
+```js
+const dayjs = await importModule('dayjs')
+const lodash = await importModule('lodash', '4.17.21')
+const axios = await importModule('axios', { package: 'axios', version: '1.7.9', manager: 'npm' })
+```
+
+`importModule(module, versionOrOptions?, manager?)` ensures the dependency is available, then returns `require(module)`. If the package name differs from the import name, use `{ package: 'real-package-name' }`.
+
+### System and utility functions
+
+| Function | Returns | Description |
+|---|---|---|
+| `render(template, selector, data)` | Render result | Render HTML/template, often to generate images. |
+| `getActiveImtypes()` | `Promise<string[]>` | Enabled IM types. |
+| `name()` | `Promise<string>` | Bot name. |
+| `domain()` | `Promise<string>` | Domain or public address. |
+| `port()` | `Promise<string \| number>` | Service port. |
+| `machineId()` | `Promise<string>` | Machine ID. |
+| `version()` | `Promise<string>` | autClaw version. |
+| `versionInfo()` | `Promise<object>` | Structured version information. |
+| `notifyMasters(content, imtypes?)` | Runtime result | Notify administrators. |
+| `coffee()` | `Promise<boolean>` | Coffee code activation status. |
+| `spread(msg)` | Runtime result | Promotion link conversion. |
+| `getHistoryMessages(imtype?)` | Message history list | Get recent message history. |
+| `generateFromSinglePrompt(prompt)` | `Promise<string>` | Generate text from one prompt. |
+
+## Cron
+
+`Cron` manages runtime scheduled commands. It is different from manifest `cron`: manifest `cron` triggers the current plugin, while the `Cron` class adds, updates, lists, and deletes runtime scheduled commands.
+
+```js
+const cron = new Cron()
+const items = await cron.getCrons()
+const item = await cron.getCron(1)
+cron.addCron('0 9 * * *', false, 'daily reminder', true, null, 'Daily reminder', '', '', '')
+cron.updateCron(1, '0 10 * * *', false, 'daily reminder', true, null, 'Daily reminder', '', '', '')
+cron.delCron(1)
+```
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `getCrons()` | None | Scheduled command list. |
+| `getCron(id)` | ID | One scheduled command. |
+| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | Schedule config | Current JS helper sends the request but returns no result. |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | Update config | Current JS helper sends the request but returns no result. |
+| `delCron(id)` | ID | Current JS helper sends the request but returns no result. |
+
+## Group management
+
+These methods depend on the current IM platform. Unsupported platforms may do nothing or return an error.
+
+```js
+await sender.groupInviteIn(friendID, groupID)
+await sender.groupKick(userID)
+await sender.groupBan(userID, 600)
+await sender.groupUnban(userID)
+await sender.groupWholeBan()
+await sender.groupWholeUnban()
+await sender.groupNoticeSend('Announcement text')
+```
+
+## Recommended template
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[title: Safe template]
+//[rule: demo (.+)]
+const { Sender, getSenderID } = require('./middleware.js')
+
+async function main() {
+  const sender = new Sender(getSenderID())
+  const value = await sender.param(1)
+  await sender.reply(value || 'Please enter text')
+}
+
+main().catch(async (error) => {
+  console.error(error && error.stack ? error.stack : error)
+})
+```
+
+## Common mistakes
+
+- `sender.param(1)` starts at `1`, not `0`.
+- `set(...)` / `bucketSet(...)` store strings. Serialize objects to JSON manually.
+- Do not bypass the SDK to call autClaw services directly. Prefer the methods on this page.
+- To download user-uploaded files, use `sender.getMediaItems()` + `downloadAdapterFile(...)`.
+- When large files or media sends fail, check `error` in the receipt and tell users the next action.

@@ -41,7 +41,7 @@ Output:
   "results": [
     {
       "title": "middleware.js Reference",
-      "path": "plugin-sdk/javascript.mdx",
+      "path": "en/plugin-sdk/javascript.mdx",
       "section": "Media replies",
       "snippet": "replyImage(source, options?) returns SendReceipt"
     }
@@ -61,7 +61,7 @@ Input:
 
 ```json
 {
-  "path": "plugin-sdk/javascript.mdx",
+  "path": "en/plugin-sdk/javascript.mdx",
   "start_line": 120,
   "max_lines": 120
 }
@@ -70,8 +70,8 @@ Input:
 Rules:
 
 - Allow only these paths:
-  - `plugin-sdk/**`
-  - `plugin-sdk/media.mdx`
+  - `en/plugin-sdk/**`
+  - `en/plugin-sdk/media.mdx`
 - Default maximum: `120` lines.
 - Hard maximum: `240` lines.
 - Large files must be read by page/range.
@@ -83,7 +83,7 @@ Input:
 
 ```json
 {
-  "path": "plugin-sdk"
+  "path": "en/plugin-sdk"
 }
 ```
 
@@ -101,22 +101,22 @@ Input:
 
 Allowed names:
 
-- `plugin-manifest` → `plugin-sdk/schemas/plugin-manifest.schema.json`
-- `middleware-runtime` → `plugin-sdk/schemas/middleware-runtime.schema.json`
-- `middleware-js-types` → `plugin-sdk/types/middleware-js.d.ts`
+- `plugin-manifest` → `en/plugin-sdk/schemas/plugin-manifest.schema.json`
+- `middleware-runtime` → `en/plugin-sdk/schemas/middleware-runtime.schema.json`
+- `middleware-js-types` → `en/plugin-sdk/types/middleware-js.d.ts`
 
 ## Static sources
 
 | Source | Purpose |
 |---|---|
 | `llms.txt` | Small LLM entry point. |
-| `plugin-sdk/ai-index.json` | Search/list seed. |
-| `plugin-sdk/javascript.mdx` | Main JavaScript SDK reference. |
-| `plugin-sdk/python.mdx` | Main Python SDK reference. |
-| `plugin-sdk/manifest.mdx` | Header/manifest contract. |
-| `plugin-sdk/types/middleware-js.d.ts` | Exact JavaScript signatures. |
-| `plugin-sdk/schemas/*.schema.json` | Machine-readable contracts. |
-| `plugin-sdk/media.mdx` | Detailed media behavior. |
+| `en/plugin-sdk/ai-index.json` | Search/list seed. |
+| `en/plugin-sdk/javascript.mdx` | Main JavaScript SDK reference. |
+| `en/plugin-sdk/python.mdx` | Main Python SDK reference. |
+| `en/plugin-sdk/manifest.mdx` | Header/manifest contract. |
+| `en/plugin-sdk/types/middleware-js.d.ts` | Exact JavaScript signatures. |
+| `en/plugin-sdk/schemas/*.schema.json` | Machine-readable contracts. |
+| `en/plugin-sdk/media.mdx` | Detailed media behavior. |
 
 ## Security boundaries
 

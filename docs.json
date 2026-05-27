@@ -9,42 +9,118 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "tabs": [
+    "languages": [
       {
-        "tab": "指南",
-        "icon": "book-open",
-        "groups": [
+        "language": "cn",
+        "default": true,
+        "navbar": {
+          "links": [
+            {
+              "label": "GitHub",
+              "href": "https://github.com/WGwuzhi/autClaw"
+            }
+          ],
+          "primary": {
+            "type": "button",
+            "label": "部署 autClaw",
+            "href": "/cn/getting-started/deploy"
+          }
+        },
+        "tabs": [
           {
-            "group": "开始使用",
-            "pages": [
-              "index",
-              "getting-started/deploy",
-              "getting-started/upgrade",
-              "getting-started/runtime-paths"
+            "tab": "指南",
+            "icon": "book-open",
+            "groups": [
+              {
+                "group": "开始使用",
+                "pages": [
+                  "cn/index",
+                  "cn/getting-started/deploy",
+                  "cn/getting-started/upgrade",
+                  "cn/getting-started/runtime-paths"
+                ]
+              },
+              {
+                "group": "运维",
+                "pages": [
+                  "cn/operations/docker",
+                  "cn/operations/chromium-cjk"
+                ]
+              }
             ]
           },
           {
-            "group": "运维",
-            "pages": [
-              "operations/docker",
-              "operations/chromium-cjk"
+            "tab": "插件开发",
+            "icon": "puzzle",
+            "groups": [
+              {
+                "group": "Plugin SDK",
+                "pages": [
+                  "cn/plugin-sdk/overview",
+                  "cn/plugin-sdk/manifest",
+                  "cn/plugin-sdk/javascript",
+                  "cn/plugin-sdk/python",
+                  "cn/plugin-sdk/media",
+                  "cn/plugin-sdk/ai"
+                ]
+              }
             ]
           }
         ]
       },
       {
-        "tab": "插件开发",
-        "icon": "puzzle",
-        "groups": [
+        "language": "en",
+        "navbar": {
+          "links": [
+            {
+              "label": "GitHub",
+              "href": "https://github.com/WGwuzhi/autClaw"
+            }
+          ],
+          "primary": {
+            "type": "button",
+            "label": "Deploy autClaw",
+            "href": "/en/getting-started/deploy"
+          }
+        },
+        "tabs": [
           {
-            "group": "Plugin SDK",
-            "pages": [
-              "plugin-sdk/overview",
-              "plugin-sdk/manifest",
-              "plugin-sdk/javascript",
-              "plugin-sdk/python",
-              "plugin-sdk/media",
-              "plugin-sdk/ai"
+            "tab": "Guides",
+            "icon": "book-open",
+            "groups": [
+              {
+                "group": "Getting started",
+                "pages": [
+                  "en/index",
+                  "en/getting-started/deploy",
+                  "en/getting-started/upgrade",
+                  "en/getting-started/runtime-paths"
+                ]
+              },
+              {
+                "group": "Operations",
+                "pages": [
+                  "en/operations/docker",
+                  "en/operations/chromium-cjk"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Plugin development",
+            "icon": "puzzle",
+            "groups": [
+              {
+                "group": "Plugin SDK",
+                "pages": [
+                  "en/plugin-sdk/overview",
+                  "en/plugin-sdk/manifest",
+                  "en/plugin-sdk/javascript",
+                  "en/plugin-sdk/python",
+                  "en/plugin-sdk/media",
+                  "en/plugin-sdk/ai"
+                ]
+              }
             ]
           }
         ]
@@ -65,7 +141,7 @@
     "primary": {
       "type": "button",
       "label": "部署 autClaw",
-      "href": "/getting-started/deploy"
+      "href": "/cn/getting-started/deploy"
     }
   },
   "contextual": {
@@ -84,5 +160,27 @@
     "socials": {
       "github": "https://github.com/WGwuzhi/autClaw"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/cn"
+    },
+    {
+      "source": "/index",
+      "destination": "/cn"
+    },
+    {
+      "source": "/getting-started/:slug*",
+      "destination": "/cn/getting-started/:slug*"
+    },
+    {
+      "source": "/operations/:slug*",
+      "destination": "/cn/operations/:slug*"
+    },
+    {
+      "source": "/plugin-sdk/:slug*",
+      "destination": "/cn/plugin-sdk/:slug*"
+    }
+  ]
 }

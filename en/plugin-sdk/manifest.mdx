@@ -1,0 +1,275 @@
+---
+title: "Plugin manifest headers"
+description: "Declare author, runtime, trigger rules, parameters, dependencies, routes, and scheduled tasks at the top of a plugin file."
+---
+
+Manifest headers are comment declarations at the top of a plugin file. autClaw reads them to show plugin metadata, match messages, generate configuration forms, install dependencies, and register routes.
+
+<Note>
+  Regular plugin authors only need the fields on this page. IM platform adapter fields are not covered here.
+</Note>
+
+## Basic syntax
+
+<Tabs>
+  <Tab title="JavaScript">
+    ```js
+    //[author: your-name]
+    //[runtime: node@22.22.1]
+    //[title: Hello]
+    //[description: Reply hello]
+    //[rule: hello]
+    const { Sender, getSenderID } = require('./middleware.js')
+
+    const sender = new Sender(getSenderID())
+    await sender.reply('hello')
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    #[author: your-name]
+    #[runtime: python@3.12]
+    #[title: Hello]
+    #[description: Reply hello]
+    #[rule: hello]
+    from middleware import Sender, getSenderID
+
+    sender = Sender(getSenderID())
+    sender.reply("hello")
+    ```
+  </Tab>
+</Tabs>
+
+## Parsing rules
+
+- JavaScript uses `//[key: value]`.
+- Python uses `#[key: value]`.
+- Declarations must be in the continuous comment block at the top of the file. Declarations after the first non-comment code line are ignored as headers.
+- `key` is case-insensitive. Use lowercase for consistency.
+- `author` is required. Without `author`, the plugin is marked as invalid.
+- For most duplicate fields, the last value wins. `rule`, `event`, `method`, `param`, `dependency`, and selector fields can repeat.
+- Boolean values support `true/false`, `1/0`, and `yes/no`.
+
+## Common fields
+
+| Header | Required | Example | Purpose |
+|---|:---:|---|---|
+| `author` | Yes | `your-name` | Plugin author. Use a stable English or pinyin identifier. |
+| `title` | No | `Order lookup` | Display name. |
+| `description` | No | `Look up status by order ID` | Short description that tells users what the plugin does. |
+| `version` | No | `1.0.0` | Plugin version. |
+| `runtime` | No | `node@22.22.1`, `python@3.12` | Runtime environment. |
+| `language` | No | `javascript`, `python` | Usually inferred from the file extension. |
+| `class` | No | `Tools` | Category or display group. |
+| `icon` | No | `bot` | Display icon. |
+| `disable` | No | `true` | Disable the plugin. |
+| `admin` | No | `true` | Only administrators can trigger the plugin. |
+| `priority` | No | `10` | Trigger priority. Higher numbers run first. |
+
+## Message trigger: rule
+
+`rule` matches user messages. You can write multiple `rule` headers.
+
+```js
+//[rule: hello]
+//[rule: query (.+)]
+```
+
+Read regex captures with `sender.param(1)`.
+
+<CodeGroup>
+```js JavaScript
+//[rule: query (.+)]
+const { Sender, getSenderID } = require('./middleware.js')
+const sender = new Sender(getSenderID())
+const keyword = await sender.param(1)
+await sender.reply(`You want to query: ${keyword}`)
+```
+
+```python Python
+#[rule: query (.+)]
+from middleware import Sender, getSenderID
+sender = Sender(getSenderID())
+keyword = sender.param(1)
+sender.reply(f"You want to query: {keyword}")
+```
+</CodeGroup>
+
+## Events and scheduled triggers
+
+| Header | Example | Purpose |
+|---|---|---|
+| `event` | `qq-notice-group_decrease-kick` | Listen for an event. Use `getEventType()` / `getEventData()` in the plugin. |
+| `cron` | `0 9 * * *` | Trigger the plugin on a schedule. |
+
+Write `cron` only once. It supports common 5-field expressions, expressions with seconds, and cron descriptors.
+
+```js
+// Trigger every day at 09:00
+//[cron: 0 9 * * *]
+```
+
+## Trigger scope
+
+Use selectors to limit which IM channels, users, or groups can trigger a plugin.
+
+```js
+//[imtype+: qq,wx]
+//[groupid+: 123456]
+//[userid-: 10001,10002]
+```
+
+| Header | Mode | Description |
+|---|---|---|
+| `imtype` / `imtype+` | Allowlist | Only allow specific IM channels. |
+| `imtype-` | Blocklist | Exclude specific IM channels. |
+| `userid` / `userid+` | Allowlist | Only allow specific users. |
+| `userid-` | Blocklist | Exclude specific users. |
+| `groupid` / `groupid+` | Allowlist | Only allow specific groups or chats. |
+| `groupid-` | Blocklist | Exclude specific groups or chats. |
+
+If you write both allowlist and blocklist selectors of the same type, the allowlist wins. Avoid mixing them.
+
+## Configuration parameters: param
+
+Use JSON in `param` headers to declare configuration fields. Declare one field per line.
+
+```js
+//[param: {"key":"api_key","name":"API Key","type":"secret","required":true,"placeholder":"sk-..."}]
+//[param: {"key":"enabled","name":"Enabled","type":"boolean","default":true}]
+//[param: {"key":"mode","name":"Mode","type":"select","options":["fast","safe"],"default":"safe"}]
+//[param: {"spliter":true,"name":"Advanced settings"}]
+```
+
+| Field | Required | Description |
+|---|:---:|---|
+| `key` | Yes | Config key. Separator items with `spliter: true` do not need it. |
+| `name` | No | Display name. Defaults to `key`. |
+| `desc` | No | Config description. |
+| `placeholder` | No | Input placeholder. |
+| `required` | No | Whether the field is required. |
+| `type` | No | `string`, `boolean`, `number`, `secret`, or `select`. Defaults to `string`. |
+| `secret` | No | Treat the field as a secret when `true`. |
+| `default` | No | Default value. |
+| `options` | No | Options for `select`. |
+| `scope` | No | `global` or `account`. Defaults to `global`. |
+| `bind` | No | Currently supports `ingress_token`. |
+| `spliter` | No | Separator title for organizing the configuration form. |
+
+## Dependencies: dependency
+
+Use `dependency` to declare packages that the plugin needs. Each line is a JSON object.
+
+```js
+//[dependency: {"name":"axios","manager":"npm","version":"1.7.9"}]
+```
+
+```python
+#[dependency: {"name":"httpx","manager":"pip","version":"0.27.2"}]
+```
+
+| Field | Required | Description |
+|---|:---:|---|
+| `name` | Yes | Package name. |
+| `manager` | No | Package manager, such as `npm`, `pip`, or `go`. |
+| `version` | No | Version. |
+
+You can also import on demand in code: JavaScript uses `importModule(...)`; Python uses `import_module(...)`.
+
+## HTTP route plugins
+
+Declare `router` to let a plugin handle HTTP requests.
+
+<CodeGroup>
+```js JavaScript
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[title: Demo API]
+//[router: /demo/{id}]
+//[method: post]
+const { Sender, getSenderID } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+const params = await sender.getRouterParams()
+const body = await sender.getRouterBody()
+await sender.response({ ok: true, id: params.id, body })
+```
+
+```python Python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Demo API]
+#[router: /demo/{id}]
+#[method: post]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+params = sender.getRouterParams()
+body = sender.getRouterBody()
+sender.response({"ok": True, "id": params.get("id"), "body": body})
+```
+</CodeGroup>
+
+| Header | Example | Description |
+|---|---|---|
+| `router` | `/demo/{id}` | Public route path. It must start with `/`. |
+| `method` | `get`, `post` | HTTP method. Can repeat or use commas. Supports `get`, `post`, `put`, and `delete`. |
+| `server` | `demo` | Optional service group name. |
+
+Do not use `/api`, `/open`, or `/healthz` as route prefixes.
+
+## Marketplace fields
+
+If you want to publish a plugin publicly, add these fields.
+
+```js
+//[public: true]
+//[open_source: false]
+//[price: 9.90]
+//[billing_mode: monthly]
+//[monthly_price: 3.00]
+//[auto_renew_default: true]
+```
+
+| Header | Example | Description |
+|---|---|---|
+| `public` | `true` | Whether to show the plugin publicly. |
+| `open_source` | `false` | Whether to expose the source code. |
+| `pin` | `true` | Whether to pin the plugin. |
+| `price` | `9.90` | One-time price. Non-negative with up to two decimals. |
+| `billing_mode` | `one_time` / `monthly` | Billing mode. |
+| `monthly_price` | `3.00` | Monthly price. Non-negative with up to two decimals. |
+| `auto_renew_default` | `true` | Whether auto-renew is enabled by default. |
+
+## Complete example
+
+```js
+//[author: demo]
+//[runtime: node@22.22.1]
+//[title: Claim card]
+//[description: Let a user send claim-card to claim one card code]
+//[version: 1.0.0]
+//[rule: claim-card]
+//[admin: false]
+//[priority: 10]
+//[param: {"key":"period_limit","name":"Period limit","type":"number","default":1}]
+//[dependency: {"name":"dayjs","manager":"npm"}]
+const { Sender, getSenderID, bucketGet, bucketSet } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+const user = await sender.getUserID()
+const claimed = await bucketGet('card_claims', user)
+
+if (claimed) {
+  await sender.reply('You have already claimed a card')
+  return
+}
+
+await bucketSet('card_claims', user, String(Date.now()))
+await sender.reply('Claimed successfully')
+```
+
+## Machine-readable files
+
+- JSON Schema: [`schemas/plugin-manifest.schema.json`](https://ac-d39c0861.mintlify.app/en/plugin-sdk/schemas/plugin-manifest.schema.json)
+- JavaScript type declarations: [`types/middleware-js.d.ts`](https://ac-d39c0861.mintlify.app/en/plugin-sdk/types/middleware-js.d.ts)

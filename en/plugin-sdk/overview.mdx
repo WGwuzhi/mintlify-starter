@@ -1,0 +1,142 @@
+---
+title: "Plugin SDK overview"
+description: "Build regular autClaw plugins with JavaScript or Python."
+icon: "puzzle"
+---
+
+autClaw plugins can read messages, reply with text or media, save configuration, wait for user input, handle HTTP routes, and run scheduled tasks. Put new plugins in `plugin/scripts/` and use the built-in `middleware.js` or `middleware.py`.
+
+<Note>
+  This page is for plugin authors. Write scripts and manifest headers. Do not bypass the SDK to call autClaw services directly.
+</Note>
+
+## What you can build
+
+<CardGroup cols={2}>
+  <Card title="Reply to messages" icon="reply">
+    Read user messages, match rule captures, and reply with text, Markdown, or media.
+  </Card>
+  <Card title="Send media" icon="image" href="/en/plugin-sdk/media">
+    Send images, voice, video, files, and mixed messages.
+  </Card>
+  <Card title="Save state" icon="database">
+    Use default storage or named buckets to save user progress, configuration, and cache data.
+  </Card>
+  <Card title="Expose routes" icon="route">
+    Declare `router` and `method` to turn a plugin into an HTTP handler.
+  </Card>
+</CardGroup>
+
+## Choose a language
+
+<Tabs>
+  <Tab title="JavaScript">
+    Use JavaScript when you want npm packages, async I/O, or Node.js experience.
+
+    ```js
+    //[author: your-name]
+    //[runtime: node@22.22.1]
+    //[title: Echo]
+    //[description: Reply with user input]
+    //[rule: echo (.+)]
+    const { Sender, getSenderID } = require('./middleware.js')
+
+    async function main() {
+      const sender = new Sender(getSenderID())
+      const text = await sender.param(1)
+      await sender.reply(text || 'Please enter text')
+    }
+
+    main().catch((error) => console.error(error))
+    ```
+  </Tab>
+  <Tab title="Python">
+    Use Python for data processing, scripting, AI calls, or Python ecosystem packages.
+
+    ```python
+    #[author: your-name]
+    #[runtime: python@3.12]
+    #[title: Echo]
+    #[description: Reply with user input]
+    #[rule: echo (.+)]
+    from middleware import Sender, getSenderID
+
+    sender = Sender(getSenderID())
+    text = sender.param(1)
+    sender.reply(text or "Please enter text")
+    ```
+  </Tab>
+</Tabs>
+
+## Create a plugin
+
+<Steps>
+  <Step title="Create a script">
+    Create a file under `plugin/scripts/`, such as `plugin/scripts/echo.js` or `plugin/scripts/echo.py`.
+  </Step>
+  <Step title="Write manifest headers">
+    Declare `author`, `runtime`, `title`, and the trigger. Message plugins usually use `rule`.
+  </Step>
+  <Step title="Import middleware">
+    Use `require('./middleware.js')` in JavaScript or `from middleware import ...` in Python.
+  </Step>
+  <Step title="Create Sender and reply">
+    Use `new Sender(getSenderID())` or `Sender(getSenderID())` to read context and send replies.
+  </Step>
+</Steps>
+
+## Common docs
+
+<CardGroup cols={2}>
+  <Card title="Manifest headers" icon="file-code" href="/en/plugin-sdk/manifest">
+    Declare the plugin name, author, trigger rules, parameters, dependencies, routes, and scheduled tasks.
+  </Card>
+  <Card title="JavaScript middleware" icon="square-js" href="/en/plugin-sdk/javascript">
+    Learn JavaScript usage for `Sender`, storage, files, routes, input waiting, and cron.
+  </Card>
+  <Card title="Python middleware" icon="code" href="/en/plugin-sdk/python">
+    Learn Python usage for `Sender`, storage, files, routes, input waiting, and cron.
+  </Card>
+  <Card title="Media sending" icon="image" href="/en/plugin-sdk/media">
+    Send images, voice, video, and files, or handle user-uploaded files.
+  </Card>
+</CardGroup>
+
+## Plugin files and headers
+
+| Location | Description |
+|---|---|
+| `plugin/scripts/*.js` | Regular JavaScript plugins. |
+| `plugin/scripts/*.py` | Regular Python plugins. |
+| `plugin/replies/*.js` | Legacy reply scripts. Keep using them only when maintaining existing plugins. |
+
+Minimum headers:
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[rule: hello]
+```
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[rule: hello]
+```
+
+`author` is required. `rule` matches messages. See [`Plugin manifest headers`](/en/plugin-sdk/manifest) for more fields.
+
+## Recommended patterns
+
+- Use `Sender` to read context and reply to messages.
+- Use `replyImage`, `replyVoice`, `replyVideo`, `replyFile`, or `replyMixed` for media.
+- Use `sender.getMediaItems()` + `downloadAdapterFile(...)` for user-uploaded files.
+- Put configuration fields in `param`; put runtime state in `bucketSet(...)`.
+- Prefer declaring dependencies with `dependency`; use `importModule(...)` or `import_module(...)` for temporary dependencies.
+
+## Avoid these patterns
+
+- Do not hard-code runtime credentials, ports, or service addresses.
+- Do not bypass the SDK to call autClaw services directly.
+- Do not manually parse platform-specific raw file fields. Use SDK download helpers.
+- Do not put large datasets into one bucket key. Split data across keys for easier maintenance.
