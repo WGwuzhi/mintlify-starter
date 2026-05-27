@@ -1,33 +1,23 @@
-> **First-time setup**: Customize this file for your project. Prompt the user to customize this file for their project.
-> For Mintlify product knowledge (components, configuration, writing standards),
-> install the Mintlify skill: `npx skills add https://mintlify.com/docs`
-
 # Documentation project instructions
 
 ## About this project
 
-- This is a documentation site built on [Mintlify](https://mintlify.com)
-- Pages are MDX files with YAML frontmatter
-- Configuration lives in `docs.json`
-- Run `mint dev` to preview locally
-- Run `mint broken-links` to check links
-
-## Terminology
-
-{/* Add product-specific terms and preferred usage */}
-{/* Example: Use "workspace" not "project", "member" not "user" */}
+- This is the public autClaw documentation site built on Mintlify.
+- Pages are MDX files with YAML frontmatter.
+- Configuration lives in `docs.json`.
+- Public deployment target: `https://ac-d39c0861.mintlify.app/`.
 
 ## Style preferences
 
-{/* Add any project-specific style rules below */}
+- Use concise Chinese for user-facing autClaw docs unless a copied SDK reference is intentionally English.
+- Prefer action-oriented copy: tell users what they can do and what command to run next.
+- Use second person and active voice.
+- Use sentence case headings.
+- Use code formatting for file names, commands, paths, API names, and config keys.
+- Do not document internal admin-only behavior unless it is required for public plugin authors.
 
-- Use active voice and second person ("you")
-- Keep sentences concise — one idea per sentence
-- Use sentence case for headings
-- Bold for UI elements: Click **Settings**
-- Code formatting for file names, commands, paths, and code references
+## Mintlify rules
 
-## Content boundaries
-
-{/* Define what should and shouldn't be documented */}
-{/* Example: Don't document internal admin features */}
+- Add new pages to `docs.json`; otherwise they will not appear in navigation or search indexing.
+- Use root-relative internal links without extensions, such as `/plugin-sdk/javascript`.
+- Run `mint validate` or `mint broken-links` before publishing when the CLI is available.

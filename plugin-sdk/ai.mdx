@@ -1,0 +1,149 @@
+---
+title: "AI and MCP retrieval"
+description: "Expose the plugin SDK docs safely to AI assistants and future read-only MCP integrations."
+---
+
+This task does not add a live `/mcp` backend endpoint. This file defines how `plugin-sdk/` should be exposed later through Mintlify or a custom read-only MCP server.
+
+## Goal
+
+Let AI assistants retrieve only the docs they need while writing autClaw plugins.
+
+Recommended flow:
+
+```text
+user question
+  ↓
+search_autclaw_plugin_docs(query, limit)
+  ↓
+read_autclaw_plugin_doc(path, start_line, max_lines)
+  ↓
+optionally read schema/type/example files
+```
+
+## Recommended MCP tools
+
+### search_autclaw_plugin_docs
+
+Input:
+
+```json
+{
+  "query": "replyImage parameters",
+  "limit": 5
+}
+```
+
+Output:
+
+```json
+{
+  "results": [
+    {
+      "title": "middleware.js Reference",
+      "path": "plugin-sdk/javascript.mdx",
+      "section": "Media replies",
+      "snippet": "replyImage(source, options?) returns SendReceipt"
+    }
+  ]
+}
+```
+
+Rules:
+
+- Default `limit=5`; maximum `10`.
+- Return title, path, section, and a short snippet only.
+- Do not return full documents from search.
+
+### read_autclaw_plugin_doc
+
+Input:
+
+```json
+{
+  "path": "plugin-sdk/javascript.mdx",
+  "start_line": 120,
+  "max_lines": 120
+}
+```
+
+Rules:
+
+- Allow only these paths:
+  - `plugin-sdk/**`
+  - `plugin-sdk/media.mdx`
+- Default maximum: `120` lines.
+- Hard maximum: `240` lines.
+- Large files must be read by page/range.
+- Do not read plugin source, databases, logs, env files, secrets, or user data.
+
+### list_autclaw_plugin_docs
+
+Input:
+
+```json
+{
+  "path": "plugin-sdk"
+}
+```
+
+Return file names and short descriptions from `ai-index.json`.
+
+### get_autclaw_plugin_schema
+
+Input:
+
+```json
+{
+  "name": "plugin-manifest"
+}
+```
+
+Allowed names:
+
+- `plugin-manifest` → `plugin-sdk/schemas/plugin-manifest.schema.json`
+- `middleware-runtime` → `plugin-sdk/schemas/middleware-runtime.schema.json`
+- `middleware-js-types` → `plugin-sdk/types/middleware-js.d.ts`
+
+## Static sources
+
+| Source | Purpose |
+|---|---|
+| `llms.txt` | Small LLM entry point. |
+| `plugin-sdk/ai-index.json` | Search/list seed. |
+| `plugin-sdk/javascript.mdx` | Main JavaScript SDK reference. |
+| `plugin-sdk/python.mdx` | Main Python SDK reference. |
+| `plugin-sdk/manifest.mdx` | Header/manifest contract. |
+| `plugin-sdk/types/middleware-js.d.ts` | Exact JavaScript signatures. |
+| `plugin-sdk/schemas/*.schema.json` | Machine-readable contracts. |
+| `plugin-sdk/media.mdx` | Detailed media behavior. |
+
+## Security boundaries
+
+A docs MCP must be read-only.
+
+Do not expose:
+
+- Arbitrary shell commands.
+- Runtime database buckets.
+- User plugin source outside the docs allowlist.
+- `plugin/.tmpfs`, `.env`, logs, tokens, config files, private keys, cookies, or database files.
+- Write operations such as saving plugins, installing dependencies, restarting, updating, or deleting.
+
+## Context budget rules
+
+- Search before reading.
+- Read the smallest section that answers the question.
+- Prefer schemas/types for exact field names.
+- Prefer prose docs for usage examples and gotchas.
+- Avoid `get_all_docs` style tools.
+
+## Future implementation note
+
+If this becomes a Go endpoint later, route changes must follow `docs/chi-best-practices.md`, add tests, run:
+
+```bash
+go run ./cmd/docgen
+```
+
+and update `docs/routes.md`.

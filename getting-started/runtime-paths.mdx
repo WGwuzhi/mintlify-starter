@@ -1,0 +1,43 @@
+---
+title: "运行目录和持久化路径"
+description: "了解 autClaw 在 Docker 和直接运行时使用哪些目录。"
+icon: "folder-tree"
+---
+
+## Docker 默认路径
+
+| 用途 | 路径 |
+|---|---|
+| 宿主机持久化目录 | `/opt/autclaw` |
+| 容器内运行目录 | `/opt/autclaw` |
+| 数据库 | `/opt/autclaw/autMan.db` |
+| 前端静态资源 | `/opt/autclaw/dist/` |
+| 插件目录 | `/opt/autclaw/plugin/` |
+| mise 运行时 | `/opt/autclaw/envs/mise` |
+| 依赖包根目录 | `/opt/autclaw/envs/packages` |
+
+## 直接运行 release 产物
+
+直接运行 release 产物时，`runtime_root` 是 `autClaw` 可执行文件所在目录。默认会在该目录下使用：
+
+```text
+autMan.db
+dist/
+plugin/
+envs/mise
+envs/packages
+```
+
+## 默认端口
+
+直接运行普通产物且没有显式设置 `HTTP_ADDR` 时，后端默认监听：
+
+```text
+:8200
+```
+
+Docker 镜像内会显式设置：
+
+```text
+HTTP_ADDR=:8200
+```

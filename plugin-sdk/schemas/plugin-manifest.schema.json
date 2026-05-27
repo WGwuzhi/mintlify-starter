@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autclaw.local/schemas/plugin-manifest.schema.json",
+  "title": "autClaw Plugin Manifest Headers",
+  "description": "Machine-readable shape for autClaw top-comment plugin manifest fields. Header syntax remains //[key: value] or #[key: value]; this schema describes the normalized object form.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Required for indexable plugins; used to build script_id with the file basename."
+    },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "version": { "type": "string" },
+    "class": { "type": "string" },
+    "icon": { "type": "string" },
+    "service": { "type": "string" },
+    "create_at": { "type": "string" },
+    "language": { "type": "string" },
+    "runtime": {
+      "type": "string",
+      "examples": ["node@22.22.1", "python@3.12", "go@1.24"]
+    },
+    "disable": { "type": "boolean", "default": false },
+    "admin": { "type": "boolean", "default": false },
+    "bypass": { "type": "boolean" },
+    "blocking": { "type": "boolean" },
+    "priority": { "type": "integer", "default": 0 },
+    "rule": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Message trigger rule. The header is repeatable."
+    },
+    "event": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Event trigger key. The header is repeatable."
+    },
+    "cron": {
+      "type": "string",
+      "description": "Cron expression for plugin self-trigger. Repeated cron headers are invalid."
+    },
+    "server": { "type": "string" },
+    "router": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Public route path. Must start with /."
+    },
+    "method": {
+      "oneOf": [
+        { "$ref": "#/$defs/routerMethod" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/routerMethod" },
+          "uniqueItems": true
+        }
+      ]
+    },
+    "imtype": { "$ref": "#/$defs/selectorValue" },
+    "imtype+": { "$ref": "#/$defs/selectorValue" },
+    "imtype-": { "$ref": "#/$defs/selectorValue" },
+    "userid": { "$ref": "#/$defs/selectorValue" },
+    "userid+": { "$ref": "#/$defs/selectorValue" },
+    "userid-": { "$ref": "#/$defs/selectorValue" },
+    "groupid": { "$ref": "#/$defs/selectorValue" },
+    "groupid+": { "$ref": "#/$defs/selectorValue" },
+    "groupid-": { "$ref": "#/$defs/selectorValue" },
+    "param": {
+      "oneOf": [
+        { "$ref": "#/$defs/param" },
+        { "type": "array", "items": { "$ref": "#/$defs/param" } }
+      ]
+    },
+    "dependency": {
+      "oneOf": [
+        { "$ref": "#/$defs/dependency" },
+        { "type": "array", "items": { "$ref": "#/$defs/dependency" } }
+      ]
+    },
+    "open_source": { "type": "boolean" },
+    "public": { "type": "boolean" },
+    "pin": { "type": "boolean" },
+    "price": { "$ref": "#/$defs/price" },
+    "billing_mode": {
+      "type": "string",
+      "enum": ["one_time", "monthly"]
+    },
+    "monthly_price": { "$ref": "#/$defs/price" },
+    "auto_renew_default": { "type": "boolean" },
+    "im_type": { "type": "string" },
+    "im_type_name": { "type": "string" },
+    "adapter_route": { "type": "string" },
+    "protocol": { "type": "string" },
+    "transport": { "type": "string" },
+    "adapter_runtime": { "type": "string" },
+    "receive_mode": { "type": "string" },
+    "receive_echo_key": { "type": "string" },
+    "receive_token_key": { "type": "string" },
+    "account_id_key": { "type": "string" },
+    "media": {
+      "oneOf": [
+        { "$ref": "#/$defs/adapterMediaPolicy" },
+        { "type": "string" }
+      ]
+    }
+  },
+  "required": ["author"],
+  "$defs": {
+    "routerMethod": {
+      "type": "string",
+      "enum": ["get", "post", "put", "delete", "GET", "POST", "PUT", "DELETE"]
+    },
+    "selectorValue": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      ]
+    },
+    "price": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+      "description": "Non-negative decimal string with at most 2 decimal places."
+    },
+    "param": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "key": { "type": "string" },
+        "name": { "type": "string" },
+        "desc": { "type": "string" },
+        "spliter": { "type": "boolean", "default": false },
+        "scope": { "type": "string", "enum": ["global", "account"] },
+        "bind": { "type": "string", "enum": ["", "ingress_token"] },
+        "required": { "type": "boolean", "default": false },
+        "bool": { "type": "boolean", "default": false },
+        "type": {
+          "type": "string",
+          "enum": ["string", "boolean", "number", "secret", "select"],
+          "default": "string"
+        },
+        "secret": { "type": "boolean", "default": false },
+        "default": true,
+        "options": { "type": "array" },
+        "placeholder": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["key"] },
+        {
+          "properties": { "spliter": { "const": true } },
+          "required": ["spliter"]
+        }
+      ]
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "manager": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "adapterMediaPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "requires_file_path": { "type": "boolean" }
+      }
+    }
+  }
+}

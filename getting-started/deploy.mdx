@@ -1,0 +1,53 @@
+---
+title: "部署 autClaw"
+description: "使用 Docker 在 Linux 主机上启动 autClaw。"
+icon: "rocket"
+---
+
+## 准备
+
+- 一台 Linux 主机。
+- 已安装 Docker。
+- 宿主机持久化目录使用 `/opt/autclaw`。
+
+## 启动容器
+
+```bash
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network host \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+启动后访问：
+
+```text
+http://localhost:8200
+```
+
+如果你在远程服务器部署，请把 `localhost` 换成服务器地址。
+
+## 查看日志
+
+```bash
+docker logs -f autclaw
+```
+
+## 重新创建容器
+
+```bash
+docker rm -f autclaw
+
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network host \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+<Warning>
+  不要删除 `/opt/autclaw`，除非你明确要清空数据、插件和运行时依赖。
+</Warning>

@@ -1,0 +1,65 @@
+---
+title: "Plugin SDK overview"
+description: "Start writing autClaw JavaScript and Python plugins."
+icon: "puzzle"
+---
+
+autClaw 插件可以读取消息上下文、回复文本和媒体、使用存储、等待用户输入、管理 cron 命令，并调用运行时能力。
+
+## 适用人群
+
+- 编写 `plugin/scripts/*.js` 的 JavaScript 插件作者。
+- 编写 `plugin/scripts/*.py` 的 Python 插件作者。
+- 维护旧版 `plugin/replies/*.js` 插件的作者。
+- 需要稳定输入输出契约的 AI 助手。
+
+## JavaScript 快速开始
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[rule: hello]
+const { Sender, getSenderID } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+const message = await sender.getMessage()
+await sender.reply(`received: ${message}`)
+```
+
+## Python 快速开始
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[rule: hello]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+message = sender.getMessage()
+sender.reply(f"received: {message}")
+```
+
+## 阅读顺序
+
+<CardGroup cols={2}>
+  <Card title="Manifest headers" icon="file-code" href="/plugin-sdk/manifest">
+    先声明 author、runtime、rule、param、dependency、router 和 cron。
+  </Card>
+  <Card title="JavaScript middleware" icon="square-js" href="/plugin-sdk/javascript">
+    查看 `middleware.js` 的 Sender、存储、媒体、router 和 cron API。
+  </Card>
+  <Card title="Python middleware" icon="code" href="/plugin-sdk/python">
+    查看 `middleware.py` 的 Sender、存储、媒体、router 和 cron API。
+  </Card>
+  <Card title="Media sending" icon="image" href="/plugin-sdk/media">
+    发送图片、语音、视频、文件和 mixed 消息。
+  </Card>
+</CardGroup>
+
+## 插件代码规则
+
+- JavaScript 插件优先使用 `require('./middleware.js')`。
+- Python 插件优先使用 `from middleware import ...`。
+- 不要直接调用 `/api/plugins/runtime/*`。
+- 下载用户上传文件时，先调用 `sender.getMediaItems()`，再把文件项传给 `downloadAdapterFile(...)`。
+- 媒体发送使用 `replyImage`、`replyVoice`、`replyVideo`、`replyFile` 或 `replyMixed`。

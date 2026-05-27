@@ -1,0 +1,30 @@
+# autClaw Docs
+
+> autClaw deployment and plugin SDK documentation. Use these pages to deploy autClaw on Linux/Docker and write JavaScript or Python plugins.
+
+## Start
+
+- Home: /index
+- Deploy autClaw: /getting-started/deploy
+- Upgrade autClaw: /getting-started/upgrade
+- Runtime paths: /getting-started/runtime-paths
+
+## Plugin SDK
+
+- Overview: /plugin-sdk/overview
+- Manifest headers: /plugin-sdk/manifest
+- JavaScript middleware reference: /plugin-sdk/javascript
+- Python middleware reference: /plugin-sdk/python
+- Media sending: /plugin-sdk/media
+- AI and MCP retrieval: /plugin-sdk/ai
+- TypeScript declaration: /plugin-sdk/types/middleware-js.d.ts
+- Manifest schema: /plugin-sdk/schemas/plugin-manifest.schema.json
+- Runtime payload schema: /plugin-sdk/schemas/middleware-runtime.schema.json
+
+## Retrieval rules
+
+- Search first, then read only the matching page or section.
+- Prefer `/plugin-sdk/javascript` for JavaScript signatures and examples.
+- Prefer `/plugin-sdk/python` for Python signatures, return bodies, and parity notes.
+- Prefer schemas/types when exact field names matter.
+- Do not call autClaw runtime APIs directly from plugins; use `middleware.js` or `middleware.py`.

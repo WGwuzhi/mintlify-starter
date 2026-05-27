@@ -1,0 +1,660 @@
+---
+title: "JavaScript middleware reference"
+description: "Use middleware.js to read context, reply, send media, use storage, handle router requests, and call runtime helpers."
+---
+
+`plugin/scripts/middleware.js` is the main SDK for ordinary JavaScript plugins. Plugins use it to read message context, send replies, use storage, wait for input, download files, manage cron commands, and call runtime capabilities.
+
+```js
+const middleware = require('./middleware.js')
+const { Sender, Cron, getSenderID } = middleware
+
+const sender = new Sender(getSenderID())
+await sender.reply('hello')
+```
+
+## Runtime model
+
+- The plugin runtime injects `AUTCLAW_PLUGIN_RUNTIME_TOKEN`, `AUTCLAW_PLUGIN_SCRIPT_ID`, `AUTCLAW_PLUGIN_RUN_ID`, `AUTCLAW_PORT`.
+- `middleware.js` internally calls local `http://127.0.0.1:<port>/api/plugins/runtime/compat`.
+- Plugin code should call middleware methods instead of building runtime tokens or calling runtime APIs directly.
+- Most methods return the response `data` field; failed requests throw `Error`.
+- Default regular request timeout is about `5000ms`, media download/send timeout is about `30000ms`.
+
+## Import pattern
+
+```js
+const {
+  Sender,
+  Cron,
+  getSenderID,
+  bucketGet,
+  bucketSet,
+  fileDownload,
+  downloadAdapterFile,
+  importModule,
+} = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+```
+
+## Common types
+
+### SendReceipt
+
+Message sending, media sending, and recall operations usually return a receipt object.
+
+```ts
+type SendReceipt = {
+  ok: boolean
+  message_id?: string
+  messageid?: string
+  message_ids?: string[]
+  raw?: unknown
+  error?: string
+  action?: string
+  [key: string]: unknown
+}
+```
+
+Note: adapters may return extra fields. Prefer `ok !== false` when checking success; accept `message_id` / `messageid`.
+
+### MediaSource
+
+```ts
+type MediaSource =
+  | 'https://...'
+  | 'http://...'
+  | '/absolute/path/file.png'
+  | './relative/path/file.png'
+  | 'base64://...'
+  | 'data:image/png;base64,...'
+```
+
+See [`/plugin-sdk/media`](/plugin-sdk/media).
+
+### MediaItem
+
+```ts
+type MediaItem = {
+  type: 'text' | 'markdown' | 'image' | 'voice' | 'video' | 'file' | string
+  text?: string
+  source?: string
+  url?: string
+  path?: string
+  file?: string
+  name?: string
+  file_name?: string
+  filename?: string
+  mime_type?: string
+  mimeType?: string
+  caption?: string
+  cover?: string
+  platform_payload?: Record<string, unknown>
+  [key: string]: unknown
+}
+```
+
+`sender.getMediaItems()` returns media from the current event or the latest `listen/input` capture. Pass file items to `downloadAdapterFile(...)`.
+
+### TargetOptions
+
+```ts
+type TargetOptions = {
+  imType?: string
+  imtype?: string
+  im_type?: string
+  accountID?: string
+  accountId?: string
+  account_id?: string
+  sessionType?: 'private' | 'group' | string
+  userID?: string
+  userId?: string
+  user_id?: string
+  groupID?: string
+  groupId?: string
+  group_id?: string
+  chatID?: string
+  chatId?: string
+  chat_id?: string
+}
+```
+
+### MediaOptions
+
+```ts
+type MediaOptions = {
+  caption?: string
+  filename?: string
+  fileName?: string
+  file_name?: string
+  mimeType?: string
+  mime_type?: string
+  cover?: string
+  target?: TargetOptions
+  constraints?: Record<string, unknown>
+  options?: Record<string, unknown>
+  timeout?: number
+}
+```
+
+## Global helpers
+
+### getSenderID
+
+```js
+const senderID = getSenderID()
+```
+
+Returns: `string`
+
+Returns the sender ID for the current run. Most message-context methods need it:
+
+```js
+const sender = new Sender(getSenderID())
+```
+
+### accessService
+
+```js
+const data = await middleware.accessService(path, body?, timeout?)
+```
+
+Parameters:
+
+| Name | Type | Required | Description |
+|---|---:|:---:|---|
+| `path` | `string` | yes | Runtime compatibility action, for example `/version`, `/bucketGet`, `/sendText`. |
+| `body` | `object` | no | Request body. `script_id` / `run_id` are added automatically. `script_id` / `run_id`. |
+| `timeout` | `number` | no | Axios timeout in milliseconds. |
+
+Returns: `Promise<any>`
+
+Recommendation: ordinary plugins should prefer concrete methods. Use `accessService` only for runtime actions that do not have a documented helper yet.
+
+### importModule
+
+```js
+const dayjs = await middleware.importModule('dayjs')
+const lodash = await middleware.importModule('lodash', '4.17.21')
+const got = await middleware.importModule('got', { package: 'got', version: '14.4.2', manager: 'npm' })
+```
+
+Parameters:
+
+| Name | Type | Required | Description |
+|---|---:|:---:|---|
+| `module` | `string` | yes | Module name used by `require(module)`. |
+| `versionOrOptions` | `string \| object` | no | Version string, or `{ package, version, manager }`. |
+| `manager` | `string` | no | Dependency manager. Common value: `npm`. |
+
+Returns: `Promise<any>` with the result of `require(module)`.
+
+Notes:
+
+- If `module` is empty, the method throws.
+- It asks runtime to ensure the dependency first, then calls `require`.
+- If the package name differs from the import name, use `{ package: 'real-package-name' }`.
+
+## File helpers
+
+### fileDownload
+
+```js
+const file = await middleware.fileDownload(url, path?)
+```
+
+Parameters:
+
+| Name | Type | Required | Description |
+|---|---:|:---:|---|
+| `url` | `string` | yes | `http(s)`, `base64://...`, or `data:*;base64,...`. |
+| `path` | `string` | no | Target directory. If omitted, the file is saved under runtime `file`; relative paths are saved under `file/<path>`; absolute paths are used as provided. |
+
+Returns:
+
+```json
+{
+  "path": "/opt/autclaw/plugin/.media/demo.png",
+  "file_path": "/opt/autclaw/plugin/.media/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
+}
+```
+
+Errors:
+
+- If `url` is empty, the method throws.
+- Oversized, unsafe, or unreachable sources throw runtime errors.
+
+### downloadAdapterFile
+
+```js
+const file = await middleware.downloadAdapterFile(fileItem, { path: 'imports' })
+```
+
+Parameters:
+
+| Name | Type | Required | Description |
+|---|---:|:---:|---|
+| `file` | `MediaItem \| object \| string` | yes | File media item from the current event, or a file reference resolvable by the adapter. |
+| `options` | `object \| number` | no | Common: `{ path, file_name, mime_type }`. If a number is passed, it is treated as timeout. |
+| `timeout` | `number` | no | Timeout in milliseconds. |
+
+Returns: same as `fileDownload(...)`. It may additionally include:
+
+```json
+{
+  "ok": true,
+  "url": "https://adapter.example/file?id=...",
+  "action": "resolveFileURL"
+}
+```
+
+Example:
+
+```js
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+if (!fileItem) {
+  await sender.reply('Please send a file')
+  return
+}
+const downloaded = await middleware.downloadAdapterFile(fileItem, { path: 'imports' })
+await sender.reply(`Saved: ${downloaded.file_name}`)
+```
+
+Notes:
+
+- Directly downloadable `http/data/base64` sources are downloaded directly.
+- Platform file references are resolved by the backend through the current adapter.
+- Plugins should not parse platform-specific private fields such as NapCat/QX internals.
+
+### getGroupMemberList
+
+```js
+const result = await middleware.getGroupMemberList(groupIDOrOptions?, options?, timeout?)
+```
+
+Parameters:
+
+| Name | Type | Required | Description |
+|---|---:|:---:|---|
+| `groupIDOrOptions` | `string \| object` | no | Group ID, or a full options object. |
+| `options` | `object \| number` | no | Extra options, or timeout. |
+| `timeout` | `number` | no | Timeout in milliseconds. |
+
+Accepted option aliases:
+
+- Group: `group_id`, `groupID`, `groupId`, `groupCode`, `group_code`, `group`, `chat_id`, `chatID`
+- IM type: `imType`, `im_type`
+- Account: `accountID`, `account_id`
+- Cache: `noCache`, `no_cache`
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "im_type": "qq",
+  "account_id": "bot_1",
+  "group_id": "123456",
+  "members": [
+    {
+      "group_id": "123456",
+      "user_id": "10001",
+      "nickname": "Alice",
+      "card": "Alice",
+      "display_name": "Alice",
+      "role": "member"
+    }
+  ]
+}
+```
+
+If `group_id` is omitted in a group message context, runtime may use the current chat. Outside group context, missing group ID is invalid.
+
+## Message and push helpers
+
+### Sender constructor
+
+```js
+const sender = new Sender(getSenderID())
+```
+
+`Sender` binds all context-aware operations to the current run. Use one instance per plugin run.
+
+### Text replies
+
+```js
+await sender.reply('text')
+await sender.replyMarkdown('# Title')
+const value = await sender.returnValue('ok')
+```
+
+| Method | Parameters | Returns | Use |
+|---|---|---|---|
+| `reply(text)` | `text: string` | `Promise<SendReceipt>` | Reply with plain text. |
+| `replyMarkdown(markdown)` | `markdown: string` | `Promise<SendReceipt>` | Reply with Markdown. |
+| `returnValue(text)` | `text: string` | `Promise<any>` | Set the run return value, commonly used by router/internal calls. |
+
+### Media replies
+
+```js
+await sender.replyImage('https://example.com/a.png')
+await sender.replyVoice('./voice.wav')
+await sender.replyVideo('./demo.mp4')
+await sender.replyFile('./report.csv', { filename: 'report.csv' })
+await sender.replyMixed([
+  { type: 'text', text: 'Result:' },
+  { type: 'image', source: 'base64://...' }
+])
+```
+
+| Method | Signature | Returns |
+|---|---|---|
+| `replyImage` | `(source, options?)` | `Promise<SendReceipt>` |
+| `replyVoice` | `(source, options?)` | `Promise<SendReceipt>` |
+| `replyVideo` | `(source, options?)` | `Promise<SendReceipt>` |
+| `replyFile` | `(source, options?)` | `Promise<SendReceipt>` |
+| `replyMixed` | `(items, options?)` | `Promise<SendReceipt>` |
+
+`replyMixed` supports text/markdown/image/voice/video/file items. For media items, `source`, `file`, `url`, and `path` are normalized into standard `media.source`.
+
+### Recall and flow control
+
+```js
+const receipt = await sender.reply('will recall later')
+await sender.recallMessage(receipt.message_id)
+await sender.breakIn('new message content')
+await sender.setContinue()
+```
+
+| Method | Parameters | Returns | Use |
+|---|---|---|---|
+| `recallMessage(messageid)` | `string` | `Promise<SendReceipt>` | Recall a message. |
+| `breakIn(content)` | `string` | `Promise<any>` | Simulate a new message and re-enter autClaw processing. |
+| `setContinue()` | none | `Promise<boolean>` | Mark that following handlers may continue. |
+
+### Push APIs
+
+```js
+await middleware.push('qq', 'group_1', '', 'Title', 'Content')
+await middleware.pushImage('qq', 'group_1', '', 'Image', 'https://example.com/a.png')
+await middleware.pushMixed('qq', 'group_1', '', 'Mixed message', [
+  { type: 'text', text: 'hello' },
+  { type: 'image', source: './a.png' }
+])
+```
+
+| Function | Signature | Returns |
+|---|---|---|
+| `push` | `(imType, groupCode, userID, title, content)` | `void` in the current JS helper; it starts the runtime request without returning its result. |
+| `pushImage` | `(imType, groupCode, userID, title, imageUrl)` | `Promise<any>` |
+| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl)` | `Promise<any>` |
+| `pushVideo` | `(imType, groupCode, userID, title, videoUrl)` | `Promise<any>` |
+| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?)` | `Promise<any>` |
+| `pushMixed` | `(imType, groupCode, userID, title, items)` | `Promise<any>` |
+
+`push*` is for proactive sending and is not necessarily bound to the current sender. Prefer explicit `imType` and target.
+
+## Sender context getters
+
+### Message/user/chat
+
+```js
+const imType = await sender.getImtype()
+const userID = await sender.getUserID()
+const userName = await sender.getUserName()
+const chatID = await sender.getChatID()
+const chatName = await sender.getChatName()
+const text = await sender.getMessage()
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getImtype()` | `Promise<string>` | Current IM channel. |
+| `getUserID()` | `Promise<string>` | Current user ID. Some legacy scenarios may return an encoded ID. |
+| `getUserName()` | `Promise<string>` | Current user name. |
+| `getUserAvatarUrl()` | `Promise<string>` | Current user avatar URL. |
+| `getChatID()` | `Promise<string>` | Current chat/group ID. |
+| `getChatName()` | `Promise<string>` | Current chat/group name. |
+| `getGroupName()` | `Promise<string>` | Compatibility alias for `getChatName()`. |
+| `isAdmin()` | `Promise<boolean>` | Whether the current user is an admin. |
+| `isAI()` | `Promise<boolean>` | Whether the current message is in an AI context. |
+| `getAIParam()` | `Promise<string>` | AI parameter. |
+| `getMessage()` | `Promise<string>` | Current message text. |
+| `getMessageID()` | `Promise<string>` | Current message ID. |
+| `getHistoryMessageIDs(number)` | `Promise<string[]>` | Historical message ID list. |
+| `middleware.getHistoryMessages(imtype)` | `Promise<any[]>` | Historical messages for the given IM channel, up to about the latest 100. |
+
+### Rule params
+
+```js
+// //[rule: query (.+)]
+const keyword = await sender.param(1)
+```
+
+`param(index)` uses 1-based indexes. Missing values return an empty string.
+
+### Router request context
+
+Router plugins are declared through manifest headers:
+
+```js
+//[router: /demo/{id}]
+//[method: post]
+```
+
+Read the request:
+
+```js
+const path = await sender.getRouterPath()
+const params = await sender.getRouterParams()
+const method = await sender.getRouterMethod()
+const headers = await sender.getRouterHeaders()
+const cookies = await sender.getRouterCookies()
+const body = await sender.getRouterBody()
+await sender.response({ ok: true, id: params.id })
+```
+
+| Method | Returns |
+|---|---|
+| `getRouterPath()` / exported `getRouter()` | `Promise<string>` |
+| `getRouterParams()` | `Promise<Record<string, string>>` |
+| `getRouterMethod()` / exported `getMethod()` | `Promise<string>` |
+| `getRouterHeaders()` | `Promise<Record<string, string \| string[]>>` |
+| `getRouterCookies()` | `Promise<Record<string, string>>` |
+| `getRouterBody()` | `Promise<any>` |
+| `getRouterData()` / exported `getRouterData()` | `Promise<string>` JSON string |
+| `response(data)` | `Promise<boolean>` |
+
+### Event context
+
+```js
+const type = await sender.getEventType()
+const data = await sender.getEventData()
+const media = await sender.getMediaItems()
+await sender.setEventData({ handled: true })
+```
+
+| Method | Returns | Description |
+|---|---|---|
+| `getEventType()` | `Promise<string>` | Current event type. |
+| `setEventType(eventType)` | `Promise<boolean>` | Update the current run event type. |
+| `getEventData()` | `Promise<any>` | Current event data, default `{}`. |
+| `setEventData(eventData)` | `Promise<boolean>` | Update current run event data. |
+| `getMediaItems()` | `Promise<MediaItem[]>` | Media from the current event or the latest listen/input capture. |
+| `getPluginName()` | `Promise<string>` | Current plugin title or name. |
+| `getPluginVersion()` | `Promise<string>` | Current plugin version. |
+
+## Storage APIs
+
+### Default bucket helpers
+
+```js
+await middleware.set('key', 'value')
+const value = await middleware.get('key')
+await middleware.del('key')
+```
+
+These helpers operate on the default `otto` bucket.
+
+| Function | Signature | Returns |
+|---|---|---|
+| `get` | `(key)` | `Promise<any>` |
+| `set` | `(key, value)` | `Promise<any>` |
+| `del` | `(key)` | `Promise<any>` |
+
+### Named bucket helpers
+
+```js
+await middleware.bucketSet('my_plugin', 'config', JSON.stringify({ enabled: true }))
+const raw = await middleware.bucketGet('my_plugin', 'config')
+const keys = await middleware.bucketAllKeys('my_plugin')
+const all = await middleware.bucketAll('my_plugin')
+```
+
+| Function / Sender method | Signature | Returns |
+|---|---|---|
+| `bucketGet` | `(bucket, key)` | `Promise<any>` |
+| `bucketSet` | `(bucket, key, value)` | `Promise<any>` |
+| `bucketDel` | `(bucket, key)` | `Promise<any>` |
+| `bucketKeys` | `(bucket, value?)` | `Promise<string[]>` |
+| `bucketAllKeys` | `(bucket)` | `Promise<string[]>` |
+| `bucketAll` | `(bucket)` | `Promise<Record<string, any>>` |
+
+`Sender` instances provide the same methods and include `senderid`. For global config, prefer `middleware.bucket*`; for data strongly tied to the current session, use `sender.bucket*`.
+
+## Wait/input/payment APIs
+
+### listen / input
+
+```js
+const text = await sender.listen(30000)
+const groupText = await sender.input(60000, 0, 'group')
+const textAndRecall = await sender.listen(30000, 5000)
+```
+
+Parameters:
+
+| Name | Type | Required | Description |
+|---|---:|:---:|---|
+| `waitTime` | `number` | yes | Wait timeout in milliseconds. |
+| `recallTime` | `number \| string` | no | Delayed recall time; if `'group'` is passed, any member in the group may answer. |
+| `scope` | `string` | no | Only `'group'` is effective. |
+
+Returns: `Promise<any>`
+
+Common returns: user input text, event object, or timeout/busy marker. The exact shape depends on the event type.
+
+### waitPay / atWaitPay
+
+```js
+const result = await sender.waitPay('order_123', 120000, '9.90')
+if (result === 'timeout') {
+  await sender.reply('payment timeout')
+} else {
+  await sender.reply(`payment success: ${result.money || result.Money}`)
+}
+```
+
+| Method | Signature | Returns |
+|---|---|---|
+| `waitPay` | `(exitcode, timeout, amount?)` | `Promise<string \| object>` |
+| `atWaitPay` | `()` | `Promise<boolean>` |
+
+Payment success returns an object with amount fields such as `money` / `Money`. Timeout or busy states can still be strings for compatibility.
+
+## Cron APIs
+
+```js
+const cron = new Cron()
+const list = await cron.getCrons()
+const id = await cron.addCron('0 9 * * *', false, 'daily reminder', true)
+await cron.updateCron(id, '0 10 * * *', false, 'daily reminder', true)
+await cron.delCron(id)
+```
+
+| Method | Signature | Returns |
+|---|---|---|
+| `getCrons()` | `()` | `Promise<any[]>` |
+| `getCron(id)` | `(id)` | `Promise<any>` |
+| `addCron` | `(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | `void` in the current JS helper; starts the runtime request. |
+| `updateCron` | `(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | `void` in the current JS helper; starts the runtime request. |
+| `delCron(id)` | `(id)` | `void` in the current JS helper; starts the runtime request. |
+
+`cron` expressions are validated by the project cron parser. Manifest `//[cron: ...]` is used for plugin self-triggering; the `Cron` class manages runtime cron commands.
+
+## System/info helpers
+
+```js
+const appName = await middleware.name()
+const publicDomain = await middleware.domain()
+const runtimePort = await middleware.port()
+const machine = await middleware.machineId()
+const version = await middleware.version()
+const info = await middleware.versionInfo()
+const imtypes = await middleware.getActiveImtypes()
+```
+
+| Function | Returns | Description |
+|---|---|---|
+| `name()` | `Promise<string>` | Bot name. |
+| `domain()` | `Promise<string>` | Bot domain or public address. |
+| `port()` | `Promise<string \| number>` | autClaw built-in port. |
+| `machineId()` | `Promise<string>` | Machine ID. |
+| `version()` | `Promise<string>` | autClaw version. |
+| `versionInfo()` | `Promise<object>` | Structured version info. |
+| `getActiveImtypes()` | `Promise<string[]>` | Current active IM channels. |
+| `notifyMasters(content, imtypes?)` | `Promise<any>` | Notify masters/admins. |
+| `coffee()` | `Promise<boolean>` | Current coffee-code activation state. |
+| `spread(msg)` | `Promise<any>` | JD/Taobao/PDD promotion link conversion. |
+| `generateFromSinglePrompt(prompt)` | `Promise<string>` | Generate text from one LLM prompt. |
+| `render(template, selector, data)` | `Promise<any>` | Render an HTML/template fragment. |
+
+## Group management helpers
+
+```js
+await sender.groupInviteIn(friendID, groupID)
+await sender.groupKick(userID)
+await sender.groupBan(userID, 600)
+await sender.groupUnban(userID)
+await sender.groupWholeBan()
+await sender.groupWholeUnban()
+await sender.groupNoticeSend('notice content')
+```
+
+These methods depend on the current adapter capability. In the current JS helper, group management methods start the runtime request without returning its result. Unsupported adapters may return an error or no effect.
+
+## Recommended plugin template
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[title: Echo]
+//[description: Reply with user message]
+//[rule: echo (.+)]
+const { Sender, getSenderID } = require('./middleware.js')
+
+async function main() {
+  const sender = new Sender(getSenderID())
+  const value = await sender.param(1)
+  await sender.reply(value || 'Please enter content')
+}
+
+main().catch((error) => {
+  console.error(error && error.stack ? error.stack : error)
+})
+```
+
+## Common mistakes
+
+- Do not hard-code runtime tokens in plugin code.
+- Do not call `/api/plugins/runtime/*` directly; use middleware methods.
+- Do not read large bucket data all at once; prefer key-based reads.
+- Do not parse adapter-private file fields; use `getMediaItems()` + `downloadAdapterFile()`.
+- Do not manually call prepare/cleanup for media; ordinary plugins use `replyImage/replyVoice/replyVideo/replyFile/replyMixed`.
+- `sender.param(index)` starts from `1`, not `0`.
+- When any group member may answer, pass `'group'` as the third argument to `listen/input`.

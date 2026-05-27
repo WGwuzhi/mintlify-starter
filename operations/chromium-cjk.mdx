@@ -1,0 +1,15 @@
+---
+title: "Chromium 中文环境"
+description: "直接运行 release 产物时，为截图和浏览器脚本补齐中文字体与 locale。"
+icon: "languages"
+---
+
+如果你不用 Docker，而是直接运行 release / 编译产物，浏览器、网页截图和 `chromedp` 相关脚本能否正常显示中文，取决于宿主机是否安装 Chromium 中文语言包、CJK 字体和 `zh_CN.UTF-8` locale。
+
+## Debian / Ubuntu 一键安装
+
+```bash
+sudo bash -lc 'set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends chromium chromium-l10n locales fonts-noto-cjk fonts-noto-color-emoji fonts-wqy-zenhei; sed -i "s/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/" /etc/locale.gen; grep -q "^zh_CN.UTF-8 UTF-8$" /etc/locale.gen || echo "zh_CN.UTF-8 UTF-8" >> /etc/locale.gen; locale-gen zh_CN.UTF-8; install -d /usr/local/bin; printf "%s\n" "#!/usr/bin/env bash" "set -euo pipefail" "export LANG=zh_CN.UTF-8" "export LC_ALL=zh_CN.UTF-8" "export LANGUAGE=zh_CN:zh" "exec /usr/bin/chromium --lang=zh-CN \"\$@\"" > /usr/local/bin/chromium; cp /usr/local/bin/chromium /usr/local/bin/chromium-browser; chmod 755 /usr/local/bin/chromium /usr/local/bin/chromium-browser; fc-cache -f'
+```
+
+安装后，重新启动手工启动的 Chromium / Chrome 调试进程。如果 autClaw 已运行，也建议重启一次 autClaw。

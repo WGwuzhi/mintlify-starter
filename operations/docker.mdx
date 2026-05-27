@@ -1,0 +1,43 @@
+---
+title: "Docker 运维命令"
+description: "查看日志、重启、删除和更新 autClaw 容器。"
+icon: "container"
+---
+
+## 查看日志
+
+```bash
+docker logs -f autclaw
+```
+
+## 停止并删除容器
+
+```bash
+docker rm -f autclaw
+```
+
+## 更新到最新镜像
+
+```bash
+docker pull nolan1121953/autclaw:latest
+docker rm -f autclaw
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network host \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+## 使用 docker compose
+
+```bash
+AUTCLAW_HOST_DATA_DIR=/opt/autclaw docker compose up -d
+```
+
+可选环境变量：
+
+| 变量 | 说明 |
+|---|---|
+| `AUTCLAW_HOST_DATA_DIR` | 宿主机持久化目录，默认建议 `/opt/autclaw`。 |
+| `AUTCLAW_IMAGE` | 自定义镜像，默认 `nolan1121953/autclaw:latest`。 |

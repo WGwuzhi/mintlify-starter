@@ -1,0 +1,329 @@
+---
+title: "Media sending"
+description: "Send images, voice, video, files, and mixed messages from ordinary JavaScript and Python plugins."
+---
+
+本文档定义普通插件使用的高层媒体发送 API。目标是保持简单、兼容、稳定。
+
+> 普通插件继续直接 `sendImage` / `sendVoice` / `sendVideo` / `sendMixed`；不要求显式 prepare。
+>
+> 兼容保留的是**旧函数名**，不是旧原始字段。middleware 内部统一发送标准 `media` 载荷；文档与新代码不再把历史兼容字段表达当作主协议。
+
+---
+
+## 1. 适用范围
+
+适用于：
+
+- `plugin/scripts/*.js`
+- `plugin/scripts/*.py`
+- 普通脚本插件、回复脚本、业务脚本
+
+不适用于：
+
+- 适配器插件底层媒体 upload 场景
+- 需要显式 file_id/media_id/receipt 控制的协议层开发
+
+---
+
+## 2. 核心原则
+
+### 2.1 高层 API 不变
+
+普通插件继续使用：
+
+- `sendText`
+- `sendMarkdown`
+- `sendImage`
+- `sendVoice`
+- `sendVideo`
+- `sendMixed`
+
+### 2.2 自动 prepare
+
+所有媒体发送 API 内部自动完成：
+
+- `source` 归一；
+- runtime `/media/prepare`；
+- 组装标准 `media` payload；
+- runtime `/messages/send`；
+- runtime `/media/cleanup`。
+
+### 2.3 普通插件无需 cleanup
+
+cleanup 完全由 middleware 自动处理。
+
+### 2.4 内部线协议统一为 media
+
+普通插件虽然继续调用 `sendImage/sendVoice/sendVideo`，但这些 API 发到 runtime 的请求体统一为：
+
+```json
+{
+  "action": "sendImage",
+  "media": {
+    "type": "image",
+    "source": "https://a.com/demo.png"
+  }
+}
+```
+
+说明：
+
+- `action` 仍保留旧名称，保证旧插件写法不变；
+- `payload.media` 是当前唯一主路径；
+- 旧原始字段表达仅作为历史背景，不再作为文档推荐协议。
+
+---
+
+## 3. JavaScript API
+
+### 3.1 sendImage
+
+```js
+await middleware.sendImage(source, options?)
+```
+
+#### source 支持
+
+- `https://...`
+- `/abs/path/image.png`
+- `./rel/path/image.png`
+- `base64://...`
+- `data:image/png;base64,...`
+
+#### options
+
+```js
+{
+  caption?: string,
+  filename?: string,
+  mimeType?: string,
+  timeout?: number,
+  target?: {
+    imType?: string,
+    accountID?: string,
+    sessionType?: 'private' | 'group',
+    userID?: string,
+    groupID?: string,
+    chatID?: string
+  }
+}
+```
+
+### 3.2 sendVoice
+
+```js
+await middleware.sendVoice(source, options?)
+```
+
+`source` 支持与 `sendImage` 同类输入，只是 `kind=voice`。
+
+### 3.3 sendVideo
+
+```js
+await middleware.sendVideo(source, options?)
+```
+
+可选额外字段：
+
+```js
+{
+  caption?: string,
+  cover?: string,
+  ...
+}
+```
+
+### 3.4 sendMixed
+
+```js
+await middleware.sendMixed(items, options?)
+```
+
+`items` 示例：
+
+```js
+[
+  { type: 'text', text: 'hello' },
+  { type: 'image', source: 'https://a.com/demo.png' },
+  { type: 'voice', source: './voice.wav' },
+  { type: 'video', source: './demo.mov' }
+]
+```
+
+支持 item：
+
+- `{ type: 'text', text: string }`
+- `{ type: 'markdown', text: string }`
+- `{ type: 'image', source: string, caption?: string }`
+- `{ type: 'voice', source: string, caption?: string }`
+- `{ type: 'video', source: string, caption?: string, cover?: string }`
+
+### 3.5 fileDownload
+
+```js
+const file = await middleware.fileDownload(url, path?)
+// ES5 / legacy plugins may also call global fileDownload(url, path?) directly.
+```
+
+`url` 支持：
+
+- `https://...` / `http://...` 图片地址
+- `base64://...`，无 MIME 信息时默认按 PNG 保存
+- `data:image/png;base64,...`
+
+`path` 是目标目录：
+
+- 不传：保存到运行目录下的 `file`，不会自动清理
+- 相对目录：保存到运行目录下的 `file/<path>`
+- 绝对目录：按原目录保存，不限制目录位置
+
+返回对象（`path` / `file_path` 为最终文件的本地绝对路径）：
+
+```js
+{
+  path: '/path/to/autclaw/file/demo.png',
+  file_path: '/path/to/autclaw/file/demo.png',
+  file_name: 'demo.png',
+  mime_type: 'image/png',
+  file_size: 12345
+}
+```
+
+---
+
+## 4. Python API
+
+### 4.1 sendImage
+
+```python
+sendImage(source, options=None)
+```
+
+`options` 与 JavaScript 侧语义一致，支持：
+
+- `file_name` / `fileName`
+- `mime_type` / `mimeType`
+- `im_type` / `imType`
+- `account_id` / `accountID`
+- `constraints`
+- `timeout`
+
+### 4.2 sendVoice
+
+```python
+sendVoice(source, options=None)
+```
+
+### 4.3 sendVideo
+
+```python
+sendVideo(source, options=None)
+```
+
+### 4.4 sendMixed
+
+```python
+sendMixed(items, options=None)
+```
+
+### 4.5 fileDownload
+
+```python
+file = fileDownload(url, path=None)
+```
+
+语义与 JavaScript 一致：默认保存到运行目录下的 `file`，相对目录保存到运行目录下的 `file/<path>`，绝对目录按原目录保存且不限制目录位置。返回 dict：`path`、`file_path`、`file_name`、`mime_type`、`file_size`；其中 `path` / `file_path` 为最终文件的本地绝对路径。
+
+---
+
+## 5. 普通插件推荐写法
+
+### JavaScript
+
+```js
+await middleware.sendImage('https://a.com/demo.png')
+await middleware.sendVoice('./tmp/tts.wav')
+await middleware.sendVideo('./tmp/demo.mov')
+const downloaded = await middleware.fileDownload('data:image/png;base64,...', 'images')
+```
+
+### Python
+
+```python
+sendImage('https://a.com/demo.png')
+sendVoice('./tmp/tts.wav')
+sendVideo('./tmp/demo.mov')
+downloaded = fileDownload('base64://...', 'images')
+```
+
+### mixed
+
+```js
+await middleware.sendMixed([
+  { type: 'text', text: '处理结果' },
+  { type: 'image', source: 'https://a.com/demo.png' },
+])
+```
+
+---
+
+## 6. 内部流程（实现要求）
+
+以 `sendVoice` 为例：
+
+```text
+sendVoice(source, options)
+  → normalize target
+  → build implicit prepare request
+  → POST /api/plugins/runtime/media/prepare
+  → POST /api/plugins/runtime/messages/send
+  → finally POST /api/plugins/runtime/media/cleanup
+```
+
+当 `options` 或运行时上下文中存在 `imType/accountID` 时，HostService 会自动合并平台默认媒体能力，再执行 prepare。
+
+### 错误处理
+
+- prepare 失败：直接失败；
+- send 失败：仍要 cleanup；
+- cleanup 失败：仅记日志，不覆盖主错误。
+
+---
+
+## 7. 返回值建议
+
+普通插件层返回值应尽量保持简单，示例：
+
+```js
+{
+  ok: true,
+  messageID: 'xxx',
+  raw: {}
+}
+```
+
+不建议普通插件直接依赖 `PrepareMediaResult` 结构。
+
+---
+
+## 8. 禁止的使用方式
+
+普通插件不应被文档主推为：
+
+```js
+const prepared = await middleware.media.prepare(...)
+await middleware.sendImage(prepared)
+await middleware.media.cleanup(prepared.cleanup_token)
+```
+
+这属于底层模式，不是普通插件主路径。
+
+---
+
+## 9. 兼容要求
+
+- 旧脚本零改动继续运行；
+- 旧 `sendImage/sendVoice/sendVideo/sendMixed` 保持可用；
+- 新能力以内置方式增强，而不是替换旧 API；
+- 兼容边界以**函数入口**为准，不再承诺旧原始字段写法仍是主协议。

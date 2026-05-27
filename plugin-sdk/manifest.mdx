@@ -1,0 +1,285 @@
+---
+title: "Plugin manifest headers"
+description: "Declare plugin metadata, triggers, config params, dependencies, routes, cron jobs, and marketplace fields."
+---
+
+Plugin manifests are top-of-file comments that declare author, runtime, triggers, config params, dependencies, cron jobs, public routes, and marketplace metadata.
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[title: Demo]
+//[description: Short description]
+//[rule: demo]
+const { Sender, getSenderID } = require('./middleware.js')
+```
+
+Python plugins use `#`:
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+```
+
+## Parsing rules
+
+- Only parse `//[key: value]` or `#[key: value]`.
+- `key` is case-insensitive and normalized to lowercase internally.
+- Most repeated scalar fields use the last value and record a warning.
+- Repeatable fields: `rule`, `event`, `method`, `param`, `dependency`, `imtype`, `imtype+`, `imtype-`, `userid`, `userid+`, `userid-`, `groupid`, `groupid+`, `groupid-`.
+- Unknown fields are preserved in `manifest_extra` and produce a warning.
+- `author` is required to generate `script_id`. Missing `author` marks the manifest invalid.
+
+## Minimal scripts plugin
+
+```js
+//[author: your-name]
+//[title: Hello]
+//[runtime: node@22.22.1]
+//[rule: hello]
+const { Sender, getSenderID } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+await sender.reply('hello')
+```
+
+## Core fields
+
+| Header | Type | Required | Description |
+|---|---:|:---:|---|
+| `author` | string | yes | Author identifier. Used to generate `script_id`, similar to `<author>:<filename>`. |
+| `title` | string | no | Display title. |
+| `description` | string | no | Short description. |
+| `version` | string | no | Plugin version. |
+| `runtime` | string | no | Runtime, for example `node@22.22.1` or `python@3.12`. |
+| `language` | string | no | Explicit language. Usually inferred from the file extension. |
+| `class` | string | no | Category/display group. |
+| `icon` | string | no | Icon. |
+| `service` | string | no | Service identifier. |
+| `create_at` | string | no | Creation time. |
+| `disable` | boolean | no | Whether disabled. Supports `true/false/1/0/yes/no`. |
+| `admin` | boolean | no | Whether only admins can use it. |
+| `priority` | integer | no | Trigger priority, default `0`. |
+
+## Trigger fields
+
+### rule
+
+```js
+//[rule: hello]
+//[rule: query (.+)]
+```
+
+- Repeatable.
+- Used for message triggers.
+- Regex capture params are available through `sender.param(1)`.
+
+### event
+
+```js
+//[event: qq-notice-group_decrease-kick]
+```
+
+- Repeatable.
+- Used for event triggers.
+- Event data is available through `sender.getEventType()` / `sender.getEventData()`.
+
+### cron
+
+```js
+//[cron: 0 9 * * *]
+```
+
+- Used for plugin self-triggering.
+- Repeated `cron` headers mark the manifest invalid.
+- Parse failures mark the manifest invalid.
+
+### blocking / bypass
+
+```js
+//[blocking: true]
+//[bypass: true]
+```
+
+| Header | Type | Description |
+|---|---:|---|
+| `blocking` | boolean | Block following processing while this plugin handles the event. |
+| `bypass` | boolean | Bypass/special-processing flag, interpreted by current runtime behavior. |
+
+## Selector fields
+
+Restrict where the plugin can trigger.
+
+```js
+//[imtype+: qq,wx]
+//[userid-: user_1,user_2]
+//[groupid+: group_1]
+```
+
+| Header | Mode | Description |
+|---|---|---|
+| `imtype` / `imtype+` | allow | Allow only the specified IM channels. |
+| `imtype-` | deny | Deny the specified IM channels. |
+| `userid` / `userid+` | allow | Allow only the specified users. |
+| `userid-` | deny | Deny the specified users. |
+| `groupid` / `groupid+` | allow | Allow only the specified groups/chats. |
+| `groupid-` | deny | Deny the specified groups/chats. |
+
+If allow and deny are both configured for the same selector type, allow wins and a warning is recorded.
+
+## Plugin params
+
+`param` is a repeatable JSON line for plugin config items.
+
+```js
+//[param: {"key":"api_key","name":"API Key","type":"secret","required":true,"placeholder":"sk-..."}]
+//[param: {"key":"enabled","name":"Enabled","type":"boolean","default":true}]
+//[param: {"spliter":true,"name":"Advanced settings"}]
+```
+
+### Param object
+
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `key` | string | yes, unless `spliter` | Config key. |
+| `name` | string | no | Display name; defaults to `key`. |
+| `desc` | string | no | Description. |
+| `placeholder` | string | no | Input placeholder. |
+| `required` | boolean | no | Whether required. |
+| `bool` | boolean | no | Legacy boolean-param flag; prefer `type: "boolean"` in new docs. |
+| `type` | `string` \| `boolean` \| `number` \| `secret` \| `select` | no | Param type, default `string`. |
+| `secret` | boolean | no | Whether secret; true normalizes `type` to `secret`. |
+| `default` | any | no | Default value. |
+| `options` | array | no | Options for `select`. |
+| `scope` | `global` \| `account` | no | Config scope; default `global`. |
+| `bind` | `ingress_token` | no | Binding purpose. |
+| `spliter` | boolean | no | Separator/title item; does not need `key`. |
+
+## Dependencies
+
+`dependency` is a repeatable JSON line.
+
+```js
+//[dependency: {"name":"axios","manager":"npm","version":"1.7.9"}]
+```
+
+| Field | Type | Required | Description |
+|---|---:|:---:|---|
+| `name` | string | yes | Package name. |
+| `manager` | string | no | Manager, for example `npm`, `pip`, or `go`. |
+| `version` | string | no | Version constraint. |
+
+Code may also use `await middleware.importModule(...)` to install/import Node modules on demand.
+
+## Router plugins
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[router: /demo/{id}]
+//[method: post]
+const { Sender, getSenderID } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+const params = await sender.getRouterParams()
+const body = await sender.getRouterBody()
+await sender.response({ ok: true, id: params.id, body })
+```
+
+| Header | Type | Description |
+|---|---:|---|
+| `router` | string | Public route path. Must start with `/`. |
+| `method` | string | `get`, `post`, `put`, `delete`; repeatable or comma-separated. |
+| `server` | string | Service name/group. |
+
+Notes:
+
+- Using a reserved public route prefix produces a warning and will not be registered.
+- Dynamic route params are available through `sender.getRouterParams()`.
+- Respond with `sender.response(data)` or `sender.returnValue(text)`.
+
+## Marketplace fields
+
+```js
+//[public: true]
+//[open_source: false]
+//[price: 9.90]
+//[billing_mode: monthly]
+//[monthly_price: 3.00]
+//[auto_renew_default: true]
+```
+
+| Header | Type | Description |
+|---|---:|---|
+| `public` | boolean | Whether publicly visible. |
+| `open_source` | boolean | Whether open-source visible. |
+| `pin` | boolean | Whether pinned. |
+| `price` | decimal string | One-time price, at most 2 decimal places. |
+| `billing_mode` | `one_time` \| `monthly` | Billing mode. |
+| `monthly_price` | decimal string | Monthly price, at most 2 decimal places. |
+| `auto_renew_default` | boolean | Default auto-renew setting. |
+
+Price fields must be non-negative decimal strings with at most 2 decimal places.
+
+## Adapter-only fields
+
+Ordinary script plugins usually do not need these fields. Adapter plugins live under `plugin/adapters/`.
+
+```js
+//[im_type: qq]
+//[im_type_name: QQ]
+//[adapter_route: qq]
+//[protocol: im]
+//[transport: ws]
+//[receive_mode: duplex]
+//[receive_echo_key: echo]
+//[receive_token_key: access_token]
+//[account_id_key: self_id]
+//[media: {"requires_file_path":true}]
+```
+
+| Header | Type | Description |
+|---|---:|---|
+| `im_type` | string | IM channel code. |
+| `im_type_name` | string | IM channel display name. |
+| `adapter_route` | string | Public adapter route. |
+| `protocol` | string | Protocol type. |
+| `transport` | `http` \| `ws` \| string | Transport. |
+| `adapter_runtime` | string | Current adapter runtime; normalized internally. |
+| `receive_mode` | string | Receive mode. |
+| `receive_echo_key` | string | Echo field. |
+| `receive_token_key` | string | Token field. |
+| `account_id_key` | string | Account ID field. |
+| `media` | object \| string | Media policy, for example `requires_file_path`. |
+
+## Full example
+
+```js
+//[author: demo]
+//[runtime: node@22.22.1]
+//[title: Card claim]
+//[description: Claim card by command]
+//[version: 1.0.0]
+//[rule: claim-card]
+//[admin: false]
+//[priority: 10]
+//[param: {"key":"period_limit","name":"Period limit","type":"number","default":1}]
+//[param: {"key":"allowed_groups","name":"Allowed groups","placeholder":"Group IDs, comma-separated"}]
+//[dependency: {"name":"dayjs","manager":"npm"}]
+const { Sender, getSenderID, bucketGet, bucketSet } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+const user = await sender.getUserID()
+const claimed = await bucketGet('card_claims', user)
+if (claimed) {
+  await sender.reply('Already claimed')
+  return
+}
+await bucketSet('card_claims', user, String(Date.now()))
+await sender.reply('Claimed successfully')
+```
+
+## Machine-readable schema
+
+- JSON Schema: [`schemas/plugin-manifest.schema.json`](/plugin-sdk/schemas/plugin-manifest.schema.json)
+- Type declarations: [`types/middleware-js.d.ts`](/plugin-sdk/types/middleware-js.d.ts)

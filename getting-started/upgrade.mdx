@@ -1,0 +1,46 @@
+---
+title: "升级 autClaw"
+description: "更新 Docker 镜像或使用 autClaw 在线更新时需要注意的事项。"
+icon: "rotate"
+---
+
+## 更新 Docker 镜像
+
+```bash
+docker pull nolan1121953/autclaw:latest
+docker rm -f autclaw
+
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network host \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+## 更新不会覆盖什么
+
+release bundle、Docker 首启拉包和在线升级都只覆盖系统 middleware 基线文件。
+
+不会覆盖：
+
+- 用户自己的 `plugin/adapters/`
+- 用户自己的 `plugin/replies/`
+- 用户自己的普通 `plugin/scripts/`
+- 数据库和运行时依赖目录
+
+## 系统会覆盖的 middleware 文件
+
+```text
+plugin/scripts/middleware.js
+plugin/scripts/middleware.py
+plugin/scripts/middleware_ql.js
+plugin/scripts/middleware_ql.py
+plugin/scripts/middleware_dd.js
+plugin/scripts/middleware_dd.py
+plugin/scripts/middleware/middleware.go
+```
+
+<Note>
+  默认在线更新源和首启 release bundle 拉取目标均指向 `WGwuzhi/autClaw`。
+</Note>
