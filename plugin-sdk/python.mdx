@@ -1,30 +1,31 @@
 ---
 title: "Python middleware reference"
-description: "Use middleware.py to read context, reply, send media, use storage, handle router requests, and call runtime helpers."
+description: "在 Python 插件中读取上下文、回复消息、发送媒体、保存数据、处理路由和定时任务。"
 ---
 
-`plugin/scripts/middleware.py` is the SDK for ordinary Python plugins. Use it to read the current message context, reply, send media, use plugin storage, wait for user input, manage cron commands, and call runtime capabilities.
+`plugin/scripts/middleware.py` 是 Python 普通插件的 SDK。你通过它创建 `Sender`、读取消息上下文、回复文本或媒体、保存数据、下载文件、等待用户输入和管理定时任务。
+
+<Note>
+  新插件优先使用 `from middleware import Sender, getSenderID`。不要在插件里硬编码凭据、端口或服务地址。
+</Note>
+
+## 快速开始
 
 ```python
 #[author: your-name]
 #[runtime: python@3.12]
-#[rule: hello]
+#[title: Echo]
+#[rule: echo (.+)]
 from middleware import Sender, getSenderID
 
 sender = Sender(getSenderID())
-sender.reply("hello")
+text = sender.param(1)
+sender.reply(text or "请输入内容")
 ```
 
-## Runtime model
+Python SDK 方法是同步调用。失败时会抛出 `Exception`，建议在关键流程里捕获并回复可执行提示。
 
-- The plugin runtime injects `AUTCLAW_PLUGIN_RUNTIME_TOKEN`, `AUTCLAW_PLUGIN_SCRIPT_ID`, `AUTCLAW_PLUGIN_RUN_ID`, and `AUTCLAW_PORT`.
-- `middleware.py` calls local `http://127.0.0.1:<port>/api/plugins/runtime/compat`.
-- Plugin code should use middleware helpers instead of calling `/api/plugins/runtime/*` directly.
-- Most helpers return the runtime response `data` field. Failed requests raise `Exception`.
-- Runtime time values such as `waitTime`, `recallTime`, and `waitPay.timeout` are milliseconds unless noted.
-- Network request timeout in Python is seconds. `listen`, `input`, and `waitPay` convert millisecond timeouts to seconds internally.
-
-## Import pattern
+## 导入方式
 
 ```python
 from middleware import (
@@ -41,313 +42,179 @@ from middleware import (
 sender = Sender(getSenderID())
 ```
 
-## Common return bodies
+常用规则：
+
+- 使用 `Sender` 处理当前消息、当前路由请求或当前事件。
+- 使用顶层函数做全局操作，例如 `bucketGet(...)`、`pushImage(...)`、`fileDownload(...)`。
+- `listen`、`input` 和 `waitPay` 的业务超时参数使用毫秒。
+
+## 常用返回值
 
 ### SendReceipt
 
-Message, media, and recall helpers usually return adapter receipts.
+文本、媒体和撤回类方法通常返回发送回执。
 
 ```json
 {
   "ok": true,
-  "message_id": "123",
-  "messageid": "123",
-  "message_ids": ["123"],
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
   "raw": {},
   "action": "sendText"
 }
 ```
 
-Adapters may include extra fields. Prefer checking `receipt.get("ok") is not False` and accept either `message_id` or `messageid`.
+适配器可能返回额外字段。判断失败时优先检查 `receipt.get("ok") is False`，消息 ID 同时兼容 `message_id` 和 `messageid`。
 
 ### FileDownloadResult
 
-`fileDownload(...)` and `downloadAdapterFile(...)` return local file metadata.
+`fileDownload(...)` 和 `downloadAdapterFile(...)` 返回本地文件信息。
 
 ```json
 {
-  "path": "/opt/autclaw/plugin/.media/demo.png",
-  "file_path": "/opt/autclaw/plugin/.media/demo.png",
+  "path": "/opt/autclaw/file/demo.png",
+  "file_path": "/opt/autclaw/file/demo.png",
   "file_name": "demo.png",
   "mime_type": "image/png",
   "file_size": 12345
 }
 ```
 
-### GroupMemberListResult
+### MediaItem
 
-`getGroupMemberList(...)` returns a normalized group member list.
-
-```json
-{
-  "ok": true,
-  "im_type": "qq",
-  "account_id": "bot_1",
-  "group_id": "123456",
-  "members": [
-    {
-      "group_id": "123456",
-      "user_id": "10001",
-      "nickname": "Alice",
-      "card": "Alice",
-      "display_name": "Alice",
-      "role": "member"
-    }
-  ]
-}
-```
-
-### MediaSource
-
-Media send helpers accept these source forms:
-
-```text
-https://...
-http://...
-/absolute/path/file.png
-./relative/path/file.png
-base64://...
-data:image/png;base64,...
-```
-
-See [`/plugin-sdk/media`](/plugin-sdk/media) for media behavior.
-
-### MediaOptions
-
-Media helpers accept a dictionary. Both Python-style and JS-style aliases are supported.
+`sender.getMediaItems()` 返回当前事件或最近一次 `listen/input` 捕获到的媒体项。
 
 ```python
 {
-    "caption": "optional caption",
-    "file_name": "demo.png",
-    "fileName": "demo.png",
-    "filename": "demo.png",
-    "mime_type": "image/png",
-    "mimeType": "image/png",
-    "cover": "./cover.png",
-    "target": {
-        "im_type": "qq",
-        "imType": "qq",
-        "account_id": "bot_1",
-        "accountID": "bot_1",
-    },
-    "constraints": {},
-    "options": {},
-    "timeout": 30,
+    "type": "file",
+    "source": "...",
+    "name": "report.csv",
+    "mime_type": "text/csv",
 }
 ```
 
-## Global helpers
+把用户上传的文件项传给 `downloadAdapterFile(...)`，不要手动解析平台原始字段。
 
-### Core runtime helpers
+## Sender
 
-| Function | Parameters | Returns | Notes |
-|---|---|---|---|
-| `getSenderID()` | none | `str` | Current run sender ID from `sys.argv[1]`. |
-| `get_service_response(path, data, timeout=None)` | `path: str`, `data: dict`, `timeout: float | None` | full runtime envelope | Low-level helper. Prefer concrete SDK functions. |
-| `pip_install(module, version="")` | `module: str`, `version: str` | `None` | Ensures a pip dependency through runtime dependency management. |
-| `import_module(module, package="", version="", manager="")` | `module: str`, optional package/version/manager | Python module object | Ensures dependency, invalidates import caches, then imports the module. |
-| `printf(message)` | any printable value | `None` | Prints a debug line and flushes stdout. |
-
-The module also contains low-level support helpers (`runtime_payload`, `resolve_runtime_route`, `normalize_wait_scope`, and `build_wait_data`). They are documented here only to make the file shape clear; ordinary plugins should not call them directly.
-
-| Helper | Parameters | Returns | Use |
-|---|---|---|---|
-| `runtime_payload(data)` | `data: dict` | runtime payload dict | Adds `script_id` and `run_id`; internal support for runtime calls. |
-| `resolve_runtime_route(path, data)` | runtime path + body | `(endpoint, payload)` | Builds `/compat` request data; internal support. |
-| `normalize_wait_scope(scope)` | scope string | `"group"` or `""` | Normalizes `listen/input` scope. |
-| `build_wait_data(sender_id, wait_time, recall_time=0, scope="")` | wait arguments | runtime wait body | Internal support for `listen/input`. |
-
-Use `import_module` when the package name differs from the import name:
-
-```python
-httpx = import_module("httpx", package="httpx", version="0.27.2", manager="pip")
-```
-
-### File helpers
-
-| Function | Parameters | Returns |
-|---|---|---|
-| `fileDownload(url, path=None)` | `url: str`, `path: str | None` | `FileDownloadResult` |
-| `downloadAdapterFile(file, options=None, timeout=None)` | `file: dict | str`, `options: dict | number | None`, `timeout: number | None` | `FileDownloadResult` |
-| `download_adapter_file(file, options=None, timeout=None)` | alias for `downloadAdapterFile` | `FileDownloadResult` |
-
-Example:
-
-```python
-items = sender.getMediaItems()
-file_item = next((item for item in items if item.get("type") == "file"), None)
-if not file_item:
-    sender.reply("Please send a file")
-else:
-    saved = downloadAdapterFile(file_item, {"path": "imports"})
-    sender.reply(f"Saved: {saved.get('file_name')}")
-```
-
-### Group member helper
-
-```python
-members = getGroupMemberList("123456")
-members = getGroupMemberList({"group_id": "123456", "no_cache": True})
-```
-
-| Function | Parameters | Returns |
-|---|---|---|
-| `getGroupMemberList(group_id_or_options=None, options=None, timeout=None)` | group ID string or options dict; optional extra options or timeout | `GroupMemberListResult` |
-| `get_group_member_list(...)` | alias for `getGroupMemberList` | `GroupMemberListResult` |
-
-Accepted option aliases include `group_id`, `groupID`, `groupId`, `groupCode`, `group_code`, `group`, `chat_id`, `chatID`, `imType`, `im_type`, `accountID`, `account_id`, `noCache`, and `no_cache`.
-
-If `group_id` is omitted in a group message context, runtime may use the current chat. Outside group context, missing group ID is invalid.
-
-### Push helpers
-
-Push helpers proactively send to a target and are not bound to the current `Sender`.
-
-| Function | Parameters | Returns |
-|---|---|---|
-| `push(imType, groupCode, userID, title, content)` | target + title/content strings | `None` |
-| `pushImage(imType, groupCode, userID, title, imageUrl)` | target + image source | runtime `data` |
-| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | target + voice source | runtime `data` |
-| `pushVideo(imType, groupCode, userID, title, videoUrl)` | target + video source | runtime `data` |
-| `pushFile(imType, groupCode, userID, title, fileUrl, options=None)` | target + file source + options | runtime `data` |
-| `pushMixed(imType, groupCode, userID, title, items)` | target + mixed items | runtime `data` |
-
-Use empty `groupCode` for private/user-targeted sends when the adapter supports it. Use empty `userID` for group-targeted sends.
-
-### System and utility helpers
-
-| Function | Parameters | Returns |
-|---|---|---|
-| `render(template, selector, jsondata)` | HTML/template source, CSS selector, JSON-like data | rendered data, commonly image/base64 data |
-| `getActiveImtypes()` | none | `list[str]` |
-| `name()` | none | `str` |
-| `domain()` | none | `str` |
-| `port()` | none | `str | int` |
-| `getPort()` | none | same as `port()` |
-| `machineId()` | none | `str` |
-| `version()` | none | `str` |
-| `versionInfo()` | none | `dict` |
-| `notifyMasters(content, imtypes=[])` | content string, optional IM type list | `bool` |
-| `coffee()` | none | `bool` |
-| `spread(msg)` | message string | runtime `data` |
-| `getHistoryMessages(imtype="")` | optional IM type | list-like runtime `data` |
-| `generateFromSinglePrompt(prompt)` | prompt string | generated text/runtime `data` |
-
-Avoid mutable default arguments in your own plugin functions. The SDK keeps compatibility signatures such as `imtypes=[]`, but new plugin code should prefer `None` defaults in custom helpers.
-
-## Storage APIs
-
-### Default bucket
-
-```python
-set("key", "value")
-value = get("key")
-delete("key")
-```
-
-| Function | Parameters | Returns | Bucket |
-|---|---|---|---|
-| `get(key)` | `key: str` | runtime `data` | `otto` |
-| `set(key, value)` | key + JSON-like value | `bool` | `otto` |
-| `delete(key)` | `key: str` | `bool` | default delete route |
-
-Python uses `delete(key)` because `del` is a language keyword. JavaScript plugins use `del(key)`.
-
-### Named buckets
-
-```python
-bucketSet("my_plugin", "config", {"enabled": True})
-config = bucketGet("my_plugin", "config")
-keys = bucketAllKeys("my_plugin")
-all_values = bucketAll("my_plugin")
-```
-
-| Function / Sender method | Parameters | Returns |
-|---|---|---|
-| `bucketGet(bucket, key)` | bucket/key strings | runtime `data` |
-| `bucketSet(bucket, key, value)` | bucket/key + JSON-like value | `bool` |
-| `bucketDel(bucket, key)` | bucket/key strings | `bool` |
-| `bucketKeys(bucket=None, value=None)` | optional bucket and value filter | `list[str]` or runtime `data` |
-| `bucketAllKeys(bucket)` | bucket string | `list[str]` or runtime `data` |
-| `bucketAll(bucket)` | bucket string | `dict` or runtime `data` |
-
-`Sender` exposes the same named bucket methods and includes `senderid` in the runtime request.
-
-## Sender class
-
-Create one `Sender` per plugin run:
+创建一个 `Sender`：
 
 ```python
 sender = Sender(getSenderID())
 ```
 
-### Message, user, and chat context
+### 读取消息上下文
 
-| Method | Parameters | Returns |
+| 方法 | 返回 | 说明 |
 |---|---|---|
-| `getImtype()` | none | `str` |
-| `getUserID()` | none | `str` |
-| `getUserName()` | none | `str` |
-| `getUserAvatarUrl()` | none | `str` |
-| `getChatID()` | none | `str` |
-| `getChatName()` | none | `str` |
-| `getGroupName()` | none | `str`, alias for `getChatName()` |
-| `isAdmin()` | none | `bool` |
-| `isAI()` | none | `bool` |
-| `getAIParam()` | none | `str` |
-| `getMessage()` | none | `str` |
-| `getMessageID()` | none | `str` |
-| `getHistoryMessageIDs(number)` | `number: int` | `list[str]` |
-| `param(i)` | 1-based match index | `str` |
-
-`param(i)` uses 1-based indexes from regex capture groups in `#[rule: ...]`.
-
-### Replies and media
-
-| Method | Parameters | Returns |
-|---|---|---|
-| `reply(text)` | `text: str` | `SendReceipt` |
-| `replyMarkdown(markdown)` | `markdown: str` | `SendReceipt` |
-| `replyImage(imageUrl, options=None)` | media source + options | `SendReceipt` |
-| `replyVoice(voiceUrl, options=None)` | media source + options | `SendReceipt` |
-| `replyVideo(videoUrl, options=None)` | media source + options | `SendReceipt` |
-| `replyFile(fileUrl, options=None)` | media source + options | `SendReceipt` |
-| `replyMixed(items, options=None)` | list of media/text items + options | `SendReceipt` |
-| `returnValue(text)` | return text | runtime `data` |
-
-Example:
+| `getImtype()` | `str` | 当前 IM 类型。 |
+| `getUserID()` | `str` | 当前用户 ID。 |
+| `getUserName()` | `str` | 当前用户昵称。 |
+| `getUserAvatarUrl()` | `str` | 当前用户头像 URL。 |
+| `getChatID()` | `str` | 当前会话 ID。 |
+| `getChatName()` | `str` | 当前会话名称。 |
+| `getGroupName()` | `str` | 群名，等同于会话名称。 |
+| `isAdmin()` | `bool` | 当前用户是否为管理员。 |
+| `isAI()` | `bool` | 当前消息是否来自 AI 触发上下文。 |
+| `getAIParam()` | `str` | AI 参数。 |
+| `getMessage()` | `str` | 当前消息文本。 |
+| `getMessageID()` | `str` | 当前消息 ID。 |
+| `getHistoryMessageIDs(number)` | `list[str]` | 最近消息 ID。 |
+| `param(i)` | `str` | 读取 `rule` 正则捕获，`i` 从 `1` 开始。 |
 
 ```python
-sender.reply("plain text")
-sender.replyMarkdown("# Title")
+user = sender.getUserName()
+message = sender.getMessage()
+sender.reply(f"{user} 发送了：{message}")
+```
+
+### 回复文本和媒体
+
+```python
+sender.reply("普通文本")
+sender.replyMarkdown("# 标题")
 sender.replyImage("https://example.com/a.png")
+sender.replyVoice("./voice.wav")
+sender.replyVideo("./demo.mp4")
 sender.replyFile("./report.csv", {"file_name": "report.csv"})
 sender.replyMixed([
-    {"type": "text", "text": "Result:"},
+    {"type": "text", "text": "结果："},
     {"type": "image", "source": "./result.png"},
 ])
 ```
 
-`replyMixed` supports `text`, `markdown`, `image`, `voice`, `video`, and `file` items. For media items, `source`, `file`, `url`, and `path` are normalized into standard media sources.
-
-### Flow control
-
-| Method | Parameters | Returns |
+| 方法 | 参数 | 返回 |
 |---|---|---|
-| `setContinue()` | none | runtime `data`, usually boolean |
-| `recallMessage(messageid)` | message ID string | `None` |
-| `breakIn(content)` | new message text | `None` |
+| `reply(text)` | `str` | `SendReceipt` |
+| `replyMarkdown(markdown)` | `str` | `SendReceipt` |
+| `replyImage(source, options=None)` | 媒体来源 | `SendReceipt` |
+| `replyVoice(source, options=None)` | 媒体来源 | `SendReceipt` |
+| `replyVideo(source, options=None)` | 媒体来源 | `SendReceipt` |
+| `replyFile(source, options=None)` | 媒体来源 | `SendReceipt` |
+| `replyMixed(items, options=None)` | mixed 列表 | `SendReceipt` |
+| `returnValue(text)` | `str` | 运行结果 |
 
-`setContinue()` allows lower-priority handlers to continue. `breakIn(...)` simulates a new message and re-enters autClaw processing.
+媒体来源和 mixed 写法见 [`Media sending`](/plugin-sdk/media)。
 
-### Router request context
+### 控制流程
 
-Router plugins are declared in headers:
+| 方法 | 参数 | 说明 |
+|---|---|---|
+| `setContinue()` | 无 | 允许继续匹配后续插件。 |
+| `recallMessage(messageid)` | 消息 ID | 撤回消息。 |
+| `breakIn(content)` | 文本 | 把新文本重新送入消息处理。 |
 
 ```python
-#[author: your-name]
-#[runtime: python@3.12]
+if sender.isAdmin():
+    sender.setContinue()
+```
+
+### 等待输入和支付
+
+| 方法 | 参数 | 返回 |
+|---|---|---|
+| `listen(waitTime, recallTime=0, scope="")` | 等待毫秒数，可选撤回毫秒数，可选 `group` | 用户输入、事件对象或超时标记。 |
+| `input(waitTime, recallTime=0, scope="")` | 同 `listen` | 用户输入、事件对象或超时标记。 |
+| `waitPay(exitcode, timeout, amount=None)` | 订单标识、超时毫秒数、可选金额 | `timeout` / `busy` / 支付成功对象。 |
+| `atWaitPay()` | 无 | `bool` |
+
+```python
+sender.reply("请在 60 秒内发送验证码")
+code = sender.input(60000)
+sender.reply(f"收到：{code}")
+```
+
+如果允许同群任意成员回答，把第三个参数设为 `"group"`：
+
+```python
+answer = sender.input(60000, 0, "group")
+```
+
+`listen(60000, "group")` 也会把第二个字符串参数识别为作用域。
+
+### 事件和媒体项
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getPluginName()` | `str` | 当前插件名称。 |
+| `getPluginVersion()` | `str` | 当前插件版本。 |
+| `getEventType()` | `str` | 当前事件类型。 |
+| `setEventType(eventType)` | 运行结果 | 设置事件类型。 |
+| `getEventData()` | JSON-like | 当前事件数据。 |
+| `setEventData(eventData)` | 运行结果 | 设置事件数据。 |
+| `getMediaItems()` | `list[dict]` | 当前事件或最近一次等待输入捕获到的媒体。 |
+
+```python
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+```
+
+### HTTP 路由请求
+
+在 manifest 中声明 `router` 和 `method` 后，可以用这些方法读取请求并响应。
+
+```python
 #[router: /demo/{id}]
 #[method: post]
 from middleware import Sender, getSenderID
@@ -358,143 +225,211 @@ body = sender.getRouterBody()
 sender.response({"ok": True, "id": params.get("id"), "body": body})
 ```
 
-| Method | Parameters | Returns |
+| 方法 | 返回 | 说明 |
 |---|---|---|
-| `getRouterPath()` | none | `str` |
-| `getRouterParams()` | none | `dict[str, str]` |
-| `getRouterMethod()` | none | `str` |
-| `getRouterHeaders()` | none | `dict` |
-| `getRouterCookies()` | none | `dict` |
-| `getRouterBody()` | none | JSON-like value |
-| `response(data)` | JSON-like value | runtime `data`, usually boolean |
+| `getRouterPath()` | `str` | 当前路由路径。 |
+| `getRouterParams()` | `dict` | 路由参数。 |
+| `getRouterMethod()` | `str` | 请求方法。 |
+| `getRouterHeaders()` | `dict` | 请求头。 |
+| `getRouterCookies()` | `dict` | Cookie。 |
+| `getRouterBody()` | JSON-like | 请求体。 |
+| `response(data)` | 运行结果 | 返回 JSON 数据。 |
 
-Python does not expose JS aliases such as `getRouter()`, `getMethod()`, or `getRouterData()` in the current SDK. Use `getRouterPath()`, `getRouterMethod()`, and `getRouterBody()` directly.
+Python 当前使用 `getRouterPath()`、`getRouterMethod()` 和 `getRouterBody()`；不要照搬 JavaScript 的 `getRouter()` / `getMethod()` / `getRouterData()` 别名。
 
-### Event context
+## 存储
 
-| Method | Parameters | Returns |
-|---|---|---|
-| `getPluginName()` | none | `str` |
-| `getPluginVersion()` | none | `str` |
-| `getEventType()` | none | `str` |
-| `setEventType(eventType)` | event type string | runtime `data`, usually boolean |
-| `getEventData()` | none | JSON-like value |
-| `setEventData(eventData)` | JSON-like value | runtime `data`, usually boolean |
-| `getMediaItems()` | none | `list[dict]` |
+### 默认存储
 
-`getMediaItems()` returns media from the current event or the latest `listen/input` capture. Pass file media items to `downloadAdapterFile(...)`.
-
-### Wait, input, and payment
-
-| Method | Parameters | Returns |
-|---|---|---|
-| `listen(waitTime, recallTime=0, scope="")` | timeout ms, optional recall ms, optional scope | user input text, event object, or timeout/busy marker |
-| `input(waitTime, recallTime=0, scope="")` | same as `listen` | user input text, event object, or timeout/busy marker |
-| `waitPay(exitcode, timeout, amount=None)` | order/exit code, timeout ms, optional expected amount | string marker such as `timeout`/`busy`, or payment success object |
-| `atWaitPay()` | none | `bool` |
-
-When any member in the same group may answer, pass `"group"` as the third argument:
+默认存储适合保存少量插件状态。
 
 ```python
-answer = sender.input(60000, 0, "group")
+set("last_user", "10001")
+user = get("last_user")
+delete("last_user")
 ```
 
-Payment success may return fields such as `money`, `Money`, `order_id`, `orderID`, or `trade_no`.
-
-### Group management
-
-| Method | Parameters | Returns |
+| 函数 | 参数 | 返回 |
 |---|---|---|
-| `groupInviteIn(friend, group)` | friend/user ID and group ID | `None` |
-| `groupKick(userid)` | user ID | `None` |
-| `groupBan(userid, timeout)` | user ID and mute duration | `None` |
-| `groupUnban(userid)` | user ID | `None` |
-| `groupWholeBan()` | none | `None` |
-| `groupWholeUnban()` | none | `None` |
-| `groupNoticeSend(notice)` | notice text | `None` |
+| `get(key)` | `str` | `str`，不存在时返回空字符串。 |
+| `set(key, value)` | key + 字符串值 | `bool` |
+| `delete(key)` | `str` | `bool` |
 
-These methods depend on adapter capability. Unsupported adapters may return an error or no effect.
+<Warning>
+  当前存储会把 `value` 按字符串保存。需要保存对象时，请先 `json.dumps(...)`，读取后再 `json.loads(...)`。
+</Warning>
 
-## Cron class
+### 命名 bucket
+
+```python
+import json
+
+bucketSet("my_plugin", "config", json.dumps({"enabled": True}))
+raw = bucketGet("my_plugin", "config")
+keys = bucketAllKeys("my_plugin")
+all_values = bucketAll("my_plugin")
+```
+
+| 函数 / Sender 方法 | 参数 | 返回 |
+|---|---|---|
+| `bucketGet(bucket, key)` | bucket + key | `str`，不存在时返回空字符串。 |
+| `bucketSet(bucket, key, value)` | bucket + key + 字符串值 | `bool` |
+| `bucketDel(bucket, key)` | bucket + key | `bool` |
+| `bucketKeys(bucket=None, value=None)` | bucket 和可选值过滤 | `list[str]` |
+| `bucketAllKeys(bucket)` | bucket | `list[str]` |
+| `bucketAll(bucket)` | bucket | `dict[str, str]` |
+
+`Sender` 也提供同名 bucket 方法，适合想把调用绑定到当前会话上下文的场景。
+
+## 文件和媒体工具
+
+| 函数 | 参数 | 返回 |
+|---|---|---|
+| `fileDownload(url, path=None)` | 下载远程 URL、`base64://...` 或 data URI | `FileDownloadResult` |
+| `downloadAdapterFile(file, options=None, timeout=None)` | 下载用户上传的文件项 | `FileDownloadResult` |
+| `download_adapter_file(...)` | `downloadAdapterFile` 别名 | `FileDownloadResult` |
+| `getGroupMemberList(group_id_or_options=None, options=None, timeout=None)` | 获取群成员列表 | 群成员列表对象 |
+| `get_group_member_list(...)` | `getGroupMemberList` 别名 | 群成员列表对象 |
+
+```python
+downloaded = fileDownload("https://example.com/a.png", "images")
+sender.replyImage(downloaded["path"])
+
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+if file_item:
+    saved = downloadAdapterFile(file_item, {"path": "imports"})
+    sender.reply(f"已保存：{saved.get('file_name')}")
+```
+
+更多媒体说明见 [`Media sending`](/plugin-sdk/media)。
+
+## 主动推送
+
+主动推送不依赖当前 `Sender`，需要指定 IM 类型、群和用户。
+
+| 函数 | 参数 | 说明 |
+|---|---|---|
+| `push(imType, groupCode, userID, title, content)` | 目标 + 标题 + 文本 | 推送文本。当前 helper 不返回结果。 |
+| `pushImage(imType, groupCode, userID, title, imageUrl)` | 目标 + 图片 | 推送图片。 |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | 目标 + 语音 | 推送语音。 |
+| `pushVideo(imType, groupCode, userID, title, videoUrl)` | 目标 + 视频 | 推送视频。 |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options=None)` | 目标 + 文件 | 推送文件。 |
+| `pushMixed(imType, groupCode, userID, title, items)` | 目标 + mixed items | 推送混合消息。 |
+
+```python
+pushImage("qq", "123456", "", "日报", "./daily.png")
+```
+
+## 依赖和工具函数
+
+### import_module
+
+```python
+requests = import_module("requests", version="2.32.3", manager="pip")
+image_module = import_module("PIL.Image", package="pillow", version="10.4.0", manager="pip")
+```
+
+`import_module(module, package="", version="", manager="")` 会先确保依赖可用，再返回导入后的 Python 模块。包名与导入名不一致时，使用 `package` 指定真实包名。
+
+### 系统和实用函数
+
+| 函数 | 返回 | 说明 |
+|---|---|---|
+| `render(template, selector, jsondata)` | 渲染结果 | 渲染 HTML/template，常用于生成图片。 |
+| `getActiveImtypes()` | `list[str]` | 当前启用的 IM 类型。 |
+| `name()` | `str` | 机器人名称。 |
+| `domain()` | `str` | 域名或公网地址。 |
+| `port()` / `getPort()` | `str \| int` | 服务端口。 |
+| `machineId()` | `str` | 机器 ID。 |
+| `version()` | `str` | autClaw 版本。 |
+| `versionInfo()` | `dict` | 结构化版本信息。 |
+| `notifyMasters(content, imtypes=[])` | `bool` | 通知管理员。 |
+| `coffee()` | `bool` | 咖啡码激活状态。 |
+| `spread(msg)` | 运行结果 | 推广转链。 |
+| `getHistoryMessages(imtype="")` | 历史消息列表 | 获取最近历史消息。 |
+| `generateFromSinglePrompt(prompt)` | `str` | 根据单条 prompt 生成文本。 |
+| `pip_install(module, version="")` | `None` | 确保 pip 依赖可用。 |
+| `printf(message)` | `None` | 打印并刷新输出。 |
+
+<Warning>
+  SDK 为兼容保留了 `imtypes=[]` 这类默认参数。你自己的 Python 函数建议使用 `None` 作为默认值，避免可变默认参数问题。
+</Warning>
+
+## Cron
+
+`Cron` 用来管理运行中的定时指令。它不同于 manifest 里的 `cron`：manifest `cron` 用来让当前插件自触发；`Cron` 类用来增删改查运行时定时指令。
 
 ```python
 cron = Cron(0)
 items = cron.getCrons()
-cron_id = cron.addCron("0 9 * * *", False, "daily reminder", True, None, "Daily", "", "", "")
-cron.updateCron(cron_id, "0 10 * * *", False, "daily reminder", True, None, "Daily", "", "", "")
+item = cron.getCron(1)
+cron_id = cron.addCron("0 9 * * *", False, "daily reminder", True, None, "每日提醒", "", "", "")
+cron.updateCron(cron_id, "0 10 * * *", False, "daily reminder", True, None, "每日提醒", "", "", "")
 cron.delCron(cron_id)
 ```
 
-| Method | Parameters | Returns |
+| 方法 | 参数 | 返回 |
 |---|---|---|
-| `Cron(cronID)` | compatibility constructor ID | `Cron` instance |
-| `getCrons()` | none | list-like runtime `data` |
-| `getCronByID(id)` | cron ID | runtime `data` |
-| `getCron(id)` | alias for `getCronByID` | runtime `data` |
-| `addCron(cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | cron expression and command metadata | new cron ID/runtime `data` |
-| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | cron ID + updated metadata | runtime `data` |
-| `deleteCron(id)` | cron ID | runtime `data` |
-| `delCron(id)` | alias for `deleteCron` | runtime `data` |
+| `Cron(cronID)` | 兼容构造参数 | `Cron` 实例。 |
+| `getCrons()` | 无 | 定时指令列表。 |
+| `getCronByID(id)` | ID | 单个定时指令。 |
+| `getCron(id)` | ID | `getCronByID` 别名。 |
+| `addCron(cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 定时配置 | 新定时 ID 或运行结果。 |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 更新配置 | 运行结果。 |
+| `deleteCron(id)` | ID | 运行结果。 |
+| `delCron(id)` | ID | `deleteCron` 别名。 |
 
-The Python `Cron` methods require all positional arguments for `addCron` / `updateCron`. Pass empty strings or `None` for fields you do not need.
+Python 的 `addCron` / `updateCron` 需要传完整位置参数；不需要的字段传 `None` 或空字符串。
 
-## Recommended plugin templates
+## 群管理
 
-### Message plugin
-
-```python
-#[author: your-name]
-#[runtime: python@3.12]
-#[title: Echo]
-#[description: Reply with user message]
-#[rule: echo (.+)]
-from middleware import Sender, getSenderID
-
-sender = Sender(getSenderID())
-value = sender.param(1)
-sender.reply(value or "Please enter content")
-```
-
-### Media import plugin
+这些方法取决于当前 IM 平台支持情况；不支持时可能无效果或返回错误。
 
 ```python
-#[author: your-name]
-#[runtime: python@3.12]
-#[title: Save file]
-#[rule: save-file]
-from middleware import Sender, getSenderID, downloadAdapterFile
-
-sender = Sender(getSenderID())
-items = sender.getMediaItems()
-file_item = next((item for item in items if item.get("type") == "file"), None)
-if not file_item:
-    sender.reply("Please send a file")
-else:
-    saved = downloadAdapterFile(file_item, {"path": "imports"})
-    sender.reply(f"Saved: {saved.get('file_name')}")
+sender.groupInviteIn(friend_id, group_id)
+sender.groupKick(user_id)
+sender.groupBan(user_id, 600)
+sender.groupUnban(user_id)
+sender.groupWholeBan()
+sender.groupWholeUnban()
+sender.groupNoticeSend("公告内容")
 ```
 
-## JavaScript parity notes
-
-Python and JavaScript middleware share most runtime routes, but the public names differ in a few places:
+## JavaScript 差异
 
 | JavaScript | Python |
 |---|---|
 | `del(key)` | `delete(key)` |
 | `importModule(...)` | `import_module(...)` |
-| `downloadAdapterFile(...)` | `downloadAdapterFile(...)` and `download_adapter_file(...)` |
-| `getGroupMemberList(...)` | `getGroupMemberList(...)` and `get_group_member_list(...)` |
-| `sender.getRouter()` | not exposed; use `sender.getRouterPath()` |
-| `sender.getMethod()` | not exposed; use `sender.getRouterMethod()` |
-| `sender.getRouterData()` | not exposed; use `sender.getRouterBody()` |
+| `downloadAdapterFile(...)` | `downloadAdapterFile(...)` / `download_adapter_file(...)` |
+| `getGroupMemberList(...)` | `getGroupMemberList(...)` / `get_group_member_list(...)` |
+| `sender.getRouter()` | 使用 `sender.getRouterPath()` |
+| `sender.getMethod()` | 使用 `sender.getRouterMethod()` |
+| `sender.getRouterData()` | 使用 `sender.getRouterBody()` |
 | `new Cron()` | `Cron(cronID)` |
 
-## Common mistakes
+## 推荐模板
 
-- Do not hard-code runtime tokens or port values.
-- Do not call `/api/plugins/runtime/*` directly from plugin code.
-- Do not parse adapter-private file fields. Use `sender.getMediaItems()` and `downloadAdapterFile(...)`.
-- Do not manually call media prepare/cleanup. Ordinary plugins use `replyImage`, `replyVoice`, `replyVideo`, `replyFile`, or `replyMixed`.
-- `sender.param(i)` starts from `1`, not `0`.
-- `listen`, `input`, and `waitPay` take timeout values in milliseconds, even though Python HTTP request timeout is seconds internally.
-- Keep bucket data bounded. Prefer key-based reads over `bucketAll(...)` for large datasets.
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Safe template]
+#[rule: demo (.+)]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+try:
+    value = sender.param(1)
+    sender.reply(value or "请输入内容")
+except Exception as error:
+    print(error)
+```
+
+## 常见错误
+
+- `sender.param(1)` 从 `1` 开始，不是 `0`。
+- `set(...)` / `bucketSet(...)` 保存字符串；对象请手动 JSON 序列化。
+- 不要绕过 SDK 直接请求 autClaw 服务；优先使用本页方法。
+- 下载用户上传文件时，使用 `sender.getMediaItems()` + `downloadAdapterFile(...)`。
+- `listen`、`input` 和 `waitPay` 的业务超时使用毫秒。

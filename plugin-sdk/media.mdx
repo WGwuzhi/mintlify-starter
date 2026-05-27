@@ -1,329 +1,352 @@
 ---
 title: "Media sending"
-description: "Send images, voice, video, files, and mixed messages from ordinary JavaScript and Python plugins."
+description: "在 JavaScript 和 Python 插件中发送图片、语音、视频、文件和混合消息。"
 ---
 
-本文档定义普通插件使用的高层媒体发送 API。目标是保持简单、兼容、稳定。
+使用媒体发送 API，你可以把图片、语音、视频、文件或图文混合内容回复到当前会话，也可以主动推送到指定 IM 目标。
 
-> 普通插件继续直接 `sendImage` / `sendVoice` / `sendVideo` / `sendMixed`；不要求显式 prepare。
->
-> 兼容保留的是**旧函数名**，不是旧原始字段。middleware 内部统一发送标准 `media` 载荷；文档与新代码不再把历史兼容字段表达当作主协议。
+<Note>
+  新插件优先使用 `Sender` 的 `replyImage`、`replyVoice`、`replyVideo`、`replyFile` 和 `replyMixed`。旧版回复脚本中的全局 `sendImage`、`sendVoice`、`sendVideo`、`sendFile`、`sendMixed` 仍可用于维护存量插件，但新文档示例不再主推全局函数。
+</Note>
 
----
+## 选择发送方式
 
-## 1. 适用范围
+<CardGroup cols={2}>
+  <Card title="回复当前会话" icon="reply">
+    在消息触发的插件里使用 `sender.replyImage(...)` 等方法，目标自动来自当前消息。
+  </Card>
+  <Card title="主动推送" icon="paper-plane">
+    使用 `pushImage(...)`、`pushVoice(...)`、`pushVideo(...)`、`pushFile(...)` 或 `pushMixed(...)` 指定 `imType`、群和用户。
+  </Card>
+  <Card title="发送组合内容" icon="list">
+    使用 `replyMixed(...)` 一次发送文本、图片、语音、视频或文件组成的消息。
+  </Card>
+  <Card title="先保存文件" icon="download">
+    使用 `fileDownload(...)` 保存远程地址、base64 或 data URI，再把本地路径传给媒体发送方法。
+  </Card>
+</CardGroup>
 
-适用于：
+## 快速示例
 
-- `plugin/scripts/*.js`
-- `plugin/scripts/*.py`
-- 普通脚本插件、回复脚本、业务脚本
+<CodeGroup>
+```js JavaScript
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[rule: 发图]
+const { Sender, getSenderID } = require('./middleware.js')
 
-不适用于：
+const sender = new Sender(getSenderID())
+const receipt = await sender.replyImage('https://example.com/demo.png')
 
-- 适配器插件底层媒体 upload 场景
-- 需要显式 file_id/media_id/receipt 控制的协议层开发
-
----
-
-## 2. 核心原则
-
-### 2.1 高层 API 不变
-
-普通插件继续使用：
-
-- `sendText`
-- `sendMarkdown`
-- `sendImage`
-- `sendVoice`
-- `sendVideo`
-- `sendMixed`
-
-### 2.2 自动 prepare
-
-所有媒体发送 API 内部自动完成：
-
-- `source` 归一；
-- runtime `/media/prepare`；
-- 组装标准 `media` payload；
-- runtime `/messages/send`；
-- runtime `/media/cleanup`。
-
-### 2.3 普通插件无需 cleanup
-
-cleanup 完全由 middleware 自动处理。
-
-### 2.4 内部线协议统一为 media
-
-普通插件虽然继续调用 `sendImage/sendVoice/sendVideo`，但这些 API 发到 runtime 的请求体统一为：
-
-```json
-{
-  "action": "sendImage",
-  "media": {
-    "type": "image",
-    "source": "https://a.com/demo.png"
-  }
+if (receipt.ok === false) {
+  await sender.reply(`图片发送失败：${receipt.error || '未知错误'}`)
 }
 ```
 
-说明：
+```python Python
+#[author: your-name]
+#[runtime: python@3.12]
+#[rule: 发图]
+from middleware import Sender, getSenderID
 
-- `action` 仍保留旧名称，保证旧插件写法不变；
-- `payload.media` 是当前唯一主路径；
-- 旧原始字段表达仅作为历史背景，不再作为文档推荐协议。
+sender = Sender(getSenderID())
+receipt = sender.replyImage("https://example.com/demo.png")
 
----
+if receipt.get("ok") is False:
+    sender.reply(f"图片发送失败：{receipt.get('error') or '未知错误'}")
+```
+</CodeGroup>
 
-## 3. JavaScript API
+## 媒体来源
 
-### 3.1 sendImage
+媒体方法的 `source` 参数支持以下形式：
 
-```js
-await middleware.sendImage(source, options?)
+| 来源 | 示例 | 适合场景 |
+|---|---|---|
+| 远程 URL | `https://example.com/a.png` | 文件已经托管在公网或适配器可访问的位置。 |
+| 本地绝对路径 | `/opt/autclaw/plugin/tmp/a.png` | 插件已经生成文件。 |
+| 本地相对路径 | `./tmp/a.png` | 文件在插件运行目录附近。 |
+| base64 | `base64://...` | 直接发送生成的二进制内容。 |
+| data URI | `data:image/png;base64,...` | 带 MIME 类型的 base64 内容。 |
+
+<Tip>
+  本地路径最适合插件自己生成的文件，例如截图、报表、TTS 语音或下载后的临时文件。远程 URL 更适合已经公开可访问的素材。
+</Tip>
+
+## 回复媒体
+
+先创建 `Sender`，再调用对应的回复方法。返回值通常是 `SendReceipt`。
+
+<CodeGroup>
+```js JavaScript
+const { Sender, getSenderID } = require('./middleware.js')
+
+const sender = new Sender(getSenderID())
+
+await sender.replyImage('https://example.com/a.png')
+await sender.replyVoice('./voice.wav')
+await sender.replyVideo('./demo.mp4')
+await sender.replyFile('./report.csv', { filename: 'report.csv' })
 ```
 
-#### source 支持
+```python Python
+from middleware import Sender, getSenderID
 
-- `https://...`
-- `/abs/path/image.png`
-- `./rel/path/image.png`
-- `base64://...`
-- `data:image/png;base64,...`
+sender = Sender(getSenderID())
 
-#### options
-
-```js
-{
-  caption?: string,
-  filename?: string,
-  mimeType?: string,
-  timeout?: number,
-  target?: {
-    imType?: string,
-    accountID?: string,
-    sessionType?: 'private' | 'group',
-    userID?: string,
-    groupID?: string,
-    chatID?: string
-  }
-}
+sender.replyImage("https://example.com/a.png")
+sender.replyVoice("./voice.wav")
+sender.replyVideo("./demo.mp4")
+sender.replyFile("./report.csv", {"file_name": "report.csv"})
 ```
+</CodeGroup>
 
-### 3.2 sendVoice
+### 方法作用
 
-```js
-await middleware.sendVoice(source, options?)
-```
+| 方法 | 作用 | 常用来源 |
+|---|---|---|
+| `replyImage(source, options?)` | 发送图片。 | `png`、`jpg`、`gif`、图片 URL、base64。 |
+| `replyVoice(source, options?)` | 发送语音。 | `wav`、`mp3`、`ogg`、`opus`、语音 URL。 |
+| `replyVideo(source, options?)` | 发送视频。 | `mp4`、`mov`、视频 URL。 |
+| `replyFile(source, options?)` | 发送文件。 | `csv`、`txt`、`pdf`、`zip` 或其他文件。 |
+| `replyMixed(items, options?)` | 发送混合消息。 | 文本 + 图片/语音/视频/文件。 |
 
-`source` 支持与 `sendImage` 同类输入，只是 `kind=voice`。
+### options
 
-### 3.3 sendVideo
+媒体回复方法的第二个参数是可选对象。当前普通插件发送帮助函数实际使用这些字段：
 
-```js
-await middleware.sendVideo(source, options?)
-```
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `filename` / `fileName` / `file_name` | `string` | 指定发送时展示或保存的文件名。 |
+| `mimeType` / `mime_type` | `string` | 指定 MIME 类型，例如 `image/png`、`video/mp4`。 |
 
-可选额外字段：
+需要指定目标时，请使用 `pushImage(...)`、`pushVoice(...)`、`pushVideo(...)`、`pushFile(...)` 或 `pushMixed(...)`。普通回复默认发送到当前会话。
 
-```js
-{
-  caption?: string,
-  cover?: string,
-  ...
-}
-```
+## 发送混合消息
 
-### 3.4 sendMixed
+`replyMixed(items, options?)` 可以把文本和媒体组成一个消息序列。媒体项可使用 `source`，也可使用 `file`、`url` 或 `path` 表示来源。
 
-```js
-await middleware.sendMixed(items, options?)
-```
-
-`items` 示例：
-
-```js
-[
-  { type: 'text', text: 'hello' },
-  { type: 'image', source: 'https://a.com/demo.png' },
-  { type: 'voice', source: './voice.wav' },
-  { type: 'video', source: './demo.mov' }
-]
-```
-
-支持 item：
-
-- `{ type: 'text', text: string }`
-- `{ type: 'markdown', text: string }`
-- `{ type: 'image', source: string, caption?: string }`
-- `{ type: 'voice', source: string, caption?: string }`
-- `{ type: 'video', source: string, caption?: string, cover?: string }`
-
-### 3.5 fileDownload
-
-```js
-const file = await middleware.fileDownload(url, path?)
-// ES5 / legacy plugins may also call global fileDownload(url, path?) directly.
-```
-
-`url` 支持：
-
-- `https://...` / `http://...` 图片地址
-- `base64://...`，无 MIME 信息时默认按 PNG 保存
-- `data:image/png;base64,...`
-
-`path` 是目标目录：
-
-- 不传：保存到运行目录下的 `file`，不会自动清理
-- 相对目录：保存到运行目录下的 `file/<path>`
-- 绝对目录：按原目录保存，不限制目录位置
-
-返回对象（`path` / `file_path` 为最终文件的本地绝对路径）：
-
-```js
-{
-  path: '/path/to/autclaw/file/demo.png',
-  file_path: '/path/to/autclaw/file/demo.png',
-  file_name: 'demo.png',
-  mime_type: 'image/png',
-  file_size: 12345
-}
-```
-
----
-
-## 4. Python API
-
-### 4.1 sendImage
-
-```python
-sendImage(source, options=None)
-```
-
-`options` 与 JavaScript 侧语义一致，支持：
-
-- `file_name` / `fileName`
-- `mime_type` / `mimeType`
-- `im_type` / `imType`
-- `account_id` / `accountID`
-- `constraints`
-- `timeout`
-
-### 4.2 sendVoice
-
-```python
-sendVoice(source, options=None)
-```
-
-### 4.3 sendVideo
-
-```python
-sendVideo(source, options=None)
-```
-
-### 4.4 sendMixed
-
-```python
-sendMixed(items, options=None)
-```
-
-### 4.5 fileDownload
-
-```python
-file = fileDownload(url, path=None)
-```
-
-语义与 JavaScript 一致：默认保存到运行目录下的 `file`，相对目录保存到运行目录下的 `file/<path>`，绝对目录按原目录保存且不限制目录位置。返回 dict：`path`、`file_path`、`file_name`、`mime_type`、`file_size`；其中 `path` / `file_path` 为最终文件的本地绝对路径。
-
----
-
-## 5. 普通插件推荐写法
-
-### JavaScript
-
-```js
-await middleware.sendImage('https://a.com/demo.png')
-await middleware.sendVoice('./tmp/tts.wav')
-await middleware.sendVideo('./tmp/demo.mov')
-const downloaded = await middleware.fileDownload('data:image/png;base64,...', 'images')
-```
-
-### Python
-
-```python
-sendImage('https://a.com/demo.png')
-sendVoice('./tmp/tts.wav')
-sendVideo('./tmp/demo.mov')
-downloaded = fileDownload('base64://...', 'images')
-```
-
-### mixed
-
-```js
-await middleware.sendMixed([
-  { type: 'text', text: '处理结果' },
-  { type: 'image', source: 'https://a.com/demo.png' },
+<CodeGroup>
+```js JavaScript
+await sender.replyMixed([
+  { type: 'text', text: '处理完成：' },
+  { type: 'image', source: './result.png', name: 'result.png' },
+  { type: 'file', source: './report.csv', name: 'report.csv', mime_type: 'text/csv' },
 ])
 ```
 
----
+```python Python
+sender.replyMixed([
+    {"type": "text", "text": "处理完成："},
+    {"type": "image", "source": "./result.png", "name": "result.png"},
+    {"type": "file", "source": "./report.csv", "name": "report.csv", "mime_type": "text/csv"},
+])
+```
+</CodeGroup>
 
-## 6. 内部流程（实现要求）
+支持的 `items`：
 
-以 `sendVoice` 为例：
+| item | 必填字段 | 说明 |
+|---|---|---|
+| `{ type: 'text', text: '...' }` | `text` | 发送普通文本片段。 |
+| `{ type: 'markdown', text: '...' }` | `text` | 发送 Markdown 文本片段，取决于适配器支持。 |
+| `{ type: 'image', source: '...' }` | `source` | 发送图片。 |
+| `{ type: 'voice', source: '...' }` | `source` | 发送语音。 |
+| `{ type: 'video', source: '...' }` | `source` | 发送视频。 |
+| `{ type: 'file', source: '...' }` | `source` | 发送文件。 |
 
-```text
-sendVoice(source, options)
-  → normalize target
-  → build implicit prepare request
-  → POST /api/plugins/runtime/media/prepare
-  → POST /api/plugins/runtime/messages/send
-  → finally POST /api/plugins/runtime/media/cleanup
+媒体项可额外传 `name`、`file_name`、`filename`、`mime_type` 或 `mimeType`。
+
+## 主动推送媒体
+
+主动推送不依赖当前消息。你需要指定目标：
+
+- `imType`：IM 类型，例如 `qq`、`wx`，以实际启用的适配器为准。
+- `groupCode`：群号/群 ID。私聊时通常传空字符串。
+- `userID`：用户 ID。群推送时通常传空字符串。
+- `title`：推送标题或备注，部分适配器会忽略。
+
+<CodeGroup>
+```js JavaScript
+const { pushImage, pushVideo, pushMixed } = require('./middleware.js')
+
+await pushImage('qq', '123456', '', '日报', './daily.png')
+await pushVideo('qq', '123456', '', '演示视频', './demo.mp4')
+await pushMixed('qq', '123456', '', '处理结果', [
+  { type: 'text', text: '结果如下：' },
+  { type: 'image', source: './result.png' },
+])
 ```
 
-当 `options` 或运行时上下文中存在 `imType/accountID` 时，HostService 会自动合并平台默认媒体能力，再执行 prepare。
+```python Python
+from middleware import pushImage, pushVideo, pushMixed
 
-### 错误处理
+pushImage("qq", "123456", "", "日报", "./daily.png")
+pushVideo("qq", "123456", "", "演示视频", "./demo.mp4")
+pushMixed("qq", "123456", "", "处理结果", [
+    {"type": "text", "text": "结果如下："},
+    {"type": "image", "source": "./result.png"},
+])
+```
+</CodeGroup>
 
-- prepare 失败：直接失败；
-- send 失败：仍要 cleanup；
-- cleanup 失败：仅记日志，不覆盖主错误。
+| 方法 | 参数 | 返回 |
+|---|---|---|
+| `pushImage` | `(imType, groupCode, userID, title, imageUrl)` | 运行时 `data` |
+| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl)` | 运行时 `data` |
+| `pushVideo` | `(imType, groupCode, userID, title, videoUrl)` | 运行时 `data` |
+| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?)` | 运行时 `data` |
+| `pushMixed` | `(imType, groupCode, userID, title, items)` | 运行时 `data` |
 
----
+## 保存并发送文件
 
-## 7. 返回值建议
+`fileDownload(url, path?)` 会把 `http(s)`、`base64://...` 或 `data:*;base64,...` 保存为本地文件。返回的 `path` / `file_path` 可以继续传给媒体发送方法。
 
-普通插件层返回值应尽量保持简单，示例：
+<CodeGroup>
+```js JavaScript
+const { Sender, getSenderID, fileDownload } = require('./middleware.js')
 
-```js
+const sender = new Sender(getSenderID())
+const file = await fileDownload('data:image/png;base64,...', 'images')
+
+await sender.replyImage(file.path, { filename: file.file_name, mimeType: file.mime_type })
+```
+
+```python Python
+from middleware import Sender, getSenderID, fileDownload
+
+sender = Sender(getSenderID())
+file = fileDownload("data:image/png;base64,...", "images")
+
+sender.replyImage(file["path"], {"file_name": file["file_name"], "mime_type": file.get("mime_type")})
+```
+</CodeGroup>
+
+### fileDownload 参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|:---:|---|
+| `url` | `string` | 是 | 支持 `http(s)`、`base64://...` 和 `data:*;base64,...`。 |
+| `path` | `string` | 否 | 保存目录。不传时保存到运行目录下的 `file`；相对路径保存到 `file/<path>`；绝对路径按原路径保存。 |
+
+### FileDownloadResult
+
+```json
 {
-  ok: true,
-  messageID: 'xxx',
-  raw: {}
+  "path": "/opt/autclaw/file/images/demo.png",
+  "file_path": "/opt/autclaw/file/images/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
 }
 ```
 
-不建议普通插件直接依赖 `PrepareMediaResult` 结构。
+`fileDownload(...)` 单个文件默认限制约 `20 MB`。下载失败、来源不可访问或文件过大时会抛出异常。
 
----
+## 处理用户上传的文件
 
-## 8. 禁止的使用方式
+如果用户在消息里上传文件，先读取媒体项，再调用 `downloadAdapterFile(...)` 保存到本地。
 
-普通插件不应被文档主推为：
+<CodeGroup>
+```js JavaScript
+const { Sender, getSenderID, downloadAdapterFile } = require('./middleware.js')
 
-```js
-const prepared = await middleware.media.prepare(...)
-await middleware.sendImage(prepared)
-await middleware.media.cleanup(prepared.cleanup_token)
+const sender = new Sender(getSenderID())
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+
+if (!fileItem) {
+  await sender.reply('请发送一个文件')
+} else {
+  const saved = await downloadAdapterFile(fileItem, { path: 'imports' })
+  await sender.reply(`已保存：${saved.file_name}`)
+}
 ```
 
-这属于底层模式，不是普通插件主路径。
+```python Python
+from middleware import Sender, getSenderID, downloadAdapterFile
 
----
+sender = Sender(getSenderID())
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
 
-## 9. 兼容要求
+if not file_item:
+    sender.reply("请发送一个文件")
+else:
+    saved = downloadAdapterFile(file_item, {"path": "imports"})
+    sender.reply(f"已保存：{saved.get('file_name')}")
+```
+</CodeGroup>
 
-- 旧脚本零改动继续运行；
-- 旧 `sendImage/sendVoice/sendVideo/sendMixed` 保持可用；
-- 新能力以内置方式增强，而不是替换旧 API；
-- 兼容边界以**函数入口**为准，不再承诺旧原始字段写法仍是主协议。
+`downloadAdapterFile(...)` 返回字段与 `fileDownload(...)` 相同，并可能额外包含：
+
+```json
+{
+  "ok": true,
+  "url": "https://adapter.example/file?id=...",
+  "action": "resolveFileURL"
+}
+```
+
+## SendReceipt
+
+文本、媒体和撤回类方法通常返回发送回执。适配器可能添加额外字段。
+
+```json
+{
+  "ok": true,
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
+  "raw": {},
+  "action": "sendImage"
+}
+```
+
+检查发送结果时，建议把 `ok === false` / `ok is False` 当作失败；不要只依赖某一个消息 ID 字段。
+
+<CodeGroup>
+```js JavaScript
+const receipt = await sender.replyVideo('./demo.mp4')
+
+if (receipt.ok === false) {
+  await sender.reply(`视频发送失败：${receipt.error || '未知错误'}`)
+} else {
+  console.log('message id:', receipt.message_id || receipt.messageid)
+}
+```
+
+```python Python
+receipt = sender.replyVideo("./demo.mp4")
+
+if receipt.get("ok") is False:
+    sender.reply(f"视频发送失败：{receipt.get('error') or '未知错误'}")
+else:
+    print("message id:", receipt.get("message_id") or receipt.get("messageid"))
+```
+</CodeGroup>
+
+## 实用技巧
+
+- 发送本地生成文件前，先确认文件已经写入完成，再调用 `replyImage` / `replyVideo` 等方法。
+- 给文件和 mixed 媒体项设置 `filename` / `name`，方便用户识别下载内容。
+- 大文件优先使用可访问的 URL；需要落盘处理时再用 `fileDownload(...)`。
+- 用户上传文件不要手动解析平台原始字段；使用 `sender.getMediaItems()` + `downloadAdapterFile(...)`。
+- 媒体发送失败时读取回执里的 `error`，并给用户一个可执行的下一步提示。
+
+## 旧版回复脚本入口
+
+维护 `plugin/replies/*.js` 这类旧版脚本时，可以继续使用全局函数：
+
+```js
+sendImage('https://example.com/a.png')
+sendVoice('./voice.wav')
+sendVideo('./demo.mp4')
+sendFile('./report.csv')
+sendMixed([
+  { type: 'text', text: '结果：' },
+  { type: 'image', source: './result.png' },
+])
+```
+
+新建 `plugin/scripts/*.js` 或 `plugin/scripts/*.py` 时，请优先使用 `Sender` 写法，便于阅读和类型提示。

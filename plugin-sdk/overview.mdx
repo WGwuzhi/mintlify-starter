@@ -1,65 +1,142 @@
 ---
 title: "Plugin SDK overview"
-description: "Start writing autClaw JavaScript and Python plugins."
+description: "用 JavaScript 或 Python 编写 autClaw 普通插件。"
 icon: "puzzle"
 ---
 
-autClaw 插件可以读取消息上下文、回复文本和媒体、使用存储、等待用户输入、管理 cron 命令，并调用运行时能力。
+autClaw 插件可以读取消息、回复文本或媒体、保存配置、等待用户输入、处理 HTTP 路由和定时任务。新插件建议放在 `plugin/scripts/`，并使用内置 `middleware.js` 或 `middleware.py`。
 
-## 适用人群
+<Note>
+  本页面面向插件作者。你只需要编写脚本和顶部声明，不需要绕过 SDK 直接请求 autClaw 服务。
+</Note>
 
-- 编写 `plugin/scripts/*.js` 的 JavaScript 插件作者。
-- 编写 `plugin/scripts/*.py` 的 Python 插件作者。
-- 维护旧版 `plugin/replies/*.js` 插件的作者。
-- 需要稳定输入输出契约的 AI 助手。
+## 你可以做什么
 
-## JavaScript 快速开始
+<CardGroup cols={2}>
+  <Card title="回复消息" icon="reply">
+    读取用户消息、匹配规则参数，并回复文本、Markdown 或媒体。
+  </Card>
+  <Card title="发送媒体" icon="image" href="/plugin-sdk/media">
+    发送图片、语音、视频、文件和 mixed 消息。
+  </Card>
+  <Card title="保存状态" icon="database">
+    使用默认存储或命名 bucket 保存用户进度、配置和缓存。
+  </Card>
+  <Card title="开放路由" icon="route">
+    声明 `router` 和 `method`，把插件变成一个 HTTP 处理函数。
+  </Card>
+</CardGroup>
+
+## 选择语言
+
+<Tabs>
+  <Tab title="JavaScript">
+    适合需要 npm 生态、异步 I/O 和前端/Node.js 经验的插件作者。
+
+    ```js
+    //[author: your-name]
+    //[runtime: node@22.22.1]
+    //[title: Echo]
+    //[description: 回复用户输入]
+    //[rule: echo (.+)]
+    const { Sender, getSenderID } = require('./middleware.js')
+
+    async function main() {
+      const sender = new Sender(getSenderID())
+      const text = await sender.param(1)
+      await sender.reply(text || '请输入内容')
+    }
+
+    main().catch((error) => console.error(error))
+    ```
+  </Tab>
+  <Tab title="Python">
+    适合数据处理、脚本自动化、AI 调用和 Python 生态依赖。
+
+    ```python
+    #[author: your-name]
+    #[runtime: python@3.12]
+    #[title: Echo]
+    #[description: 回复用户输入]
+    #[rule: echo (.+)]
+    from middleware import Sender, getSenderID
+
+    sender = Sender(getSenderID())
+    text = sender.param(1)
+    sender.reply(text or "请输入内容")
+    ```
+  </Tab>
+</Tabs>
+
+## 创建一个插件
+
+<Steps>
+  <Step title="新建脚本">
+    在 `plugin/scripts/` 下创建文件，例如 `plugin/scripts/echo.js` 或 `plugin/scripts/echo.py`。
+  </Step>
+  <Step title="写 manifest headers">
+    在文件顶部声明 `author`、`runtime`、`title` 和触发方式。消息插件通常使用 `rule`。
+  </Step>
+  <Step title="导入 middleware">
+    JavaScript 使用 `require('./middleware.js')`；Python 使用 `from middleware import ...`。
+  </Step>
+  <Step title="创建 Sender 并回复">
+    用 `new Sender(getSenderID())` 或 `Sender(getSenderID())` 读取上下文和发送回复。
+  </Step>
+</Steps>
+
+## 常用文档
+
+<CardGroup cols={2}>
+  <Card title="Manifest headers" icon="file-code" href="/plugin-sdk/manifest">
+    声明插件名称、作者、触发规则、参数、依赖、路由和定时任务。
+  </Card>
+  <Card title="JavaScript middleware" icon="square-js" href="/plugin-sdk/javascript">
+    查看 `Sender`、存储、文件、路由、等待输入和 cron 的 JavaScript 用法。
+  </Card>
+  <Card title="Python middleware" icon="code" href="/plugin-sdk/python">
+    查看 `Sender`、存储、文件、路由、等待输入和 cron 的 Python 用法。
+  </Card>
+  <Card title="Media sending" icon="image" href="/plugin-sdk/media">
+    发送图片、语音、视频、文件，或处理用户上传文件。
+  </Card>
+</CardGroup>
+
+## 插件文件和声明
+
+| 位置 | 说明 |
+|---|---|
+| `plugin/scripts/*.js` | 普通 JavaScript 插件。 |
+| `plugin/scripts/*.py` | 普通 Python 插件。 |
+| `plugin/replies/*.js` | 旧版回复脚本。维护旧插件时可继续使用。 |
+
+最小声明：
 
 ```js
 //[author: your-name]
 //[runtime: node@22.22.1]
 //[rule: hello]
-const { Sender, getSenderID } = require('./middleware.js')
-
-const sender = new Sender(getSenderID())
-const message = await sender.getMessage()
-await sender.reply(`received: ${message}`)
 ```
-
-## Python 快速开始
 
 ```python
 #[author: your-name]
 #[runtime: python@3.12]
 #[rule: hello]
-from middleware import Sender, getSenderID
-
-sender = Sender(getSenderID())
-message = sender.getMessage()
-sender.reply(f"received: {message}")
 ```
 
-## 阅读顺序
+`author` 必填。`rule` 用来匹配消息。更多字段见 [`Plugin manifest headers`](/plugin-sdk/manifest)。
 
-<CardGroup cols={2}>
-  <Card title="Manifest headers" icon="file-code" href="/plugin-sdk/manifest">
-    先声明 author、runtime、rule、param、dependency、router 和 cron。
-  </Card>
-  <Card title="JavaScript middleware" icon="square-js" href="/plugin-sdk/javascript">
-    查看 `middleware.js` 的 Sender、存储、媒体、router 和 cron API。
-  </Card>
-  <Card title="Python middleware" icon="code" href="/plugin-sdk/python">
-    查看 `middleware.py` 的 Sender、存储、媒体、router 和 cron API。
-  </Card>
-  <Card title="Media sending" icon="image" href="/plugin-sdk/media">
-    发送图片、语音、视频、文件和 mixed 消息。
-  </Card>
-</CardGroup>
+## 推荐写法
 
-## 插件代码规则
-
-- JavaScript 插件优先使用 `require('./middleware.js')`。
-- Python 插件优先使用 `from middleware import ...`。
-- 不要直接调用 `/api/plugins/runtime/*`。
-- 下载用户上传文件时，先调用 `sender.getMediaItems()`，再把文件项传给 `downloadAdapterFile(...)`。
+- 使用 `Sender` 读取上下文和回复消息。
 - 媒体发送使用 `replyImage`、`replyVoice`、`replyVideo`、`replyFile` 或 `replyMixed`。
+- 用户上传文件使用 `sender.getMediaItems()` + `downloadAdapterFile(...)`。
+- 配置项写在 `param` 里，运行状态写入 `bucketSet(...)`。
+- 依赖优先写在 `dependency` 里；临时依赖可用 `importModule(...)` 或 `import_module(...)`。
+
+## 避免这些做法
+
+- 不要硬编码运行时凭据、端口或服务地址。
+- 不要绕过 SDK 直接请求 autClaw 服务。
+- 不要手动解析平台原始文件字段；使用 SDK 的文件下载方法。
+- 不要把大量数据塞进一个 bucket key；拆成多个 key 更容易维护。

@@ -1,181 +1,190 @@
 ---
 title: "Plugin manifest headers"
-description: "Declare plugin metadata, triggers, config params, dependencies, routes, cron jobs, and marketplace fields."
+description: "在插件文件顶部声明作者、运行时、触发规则、参数、依赖、路由和定时任务。"
 ---
 
-Plugin manifests are top-of-file comments that declare author, runtime, triggers, config params, dependencies, cron jobs, public routes, and marketplace metadata.
+Manifest headers 是插件文件顶部的注释声明。autClaw 读取这些声明来显示插件信息、匹配消息、生成配置表单、安装依赖和注册路由。
+
+<Note>
+  普通插件作者只需要关注本页字段。连接新 IM 平台所需的接入字段不在这里展开。
+</Note>
+
+## 基本写法
+
+<Tabs>
+  <Tab title="JavaScript">
+    ```js
+    //[author: your-name]
+    //[runtime: node@22.22.1]
+    //[title: Hello]
+    //[description: 回复 hello]
+    //[rule: hello]
+    const { Sender, getSenderID } = require('./middleware.js')
+
+    const sender = new Sender(getSenderID())
+    await sender.reply('hello')
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    #[author: your-name]
+    #[runtime: python@3.12]
+    #[title: Hello]
+    #[description: 回复 hello]
+    #[rule: hello]
+    from middleware import Sender, getSenderID
+
+    sender = Sender(getSenderID())
+    sender.reply("hello")
+    ```
+  </Tab>
+</Tabs>
+
+## 解析规则
+
+- JavaScript 使用 `//[key: value]`。
+- Python 使用 `#[key: value]`。
+- 声明必须放在文件顶部的连续注释区；遇到第一行非注释代码后，后面的声明不会作为头部声明读取。
+- `key` 不区分大小写，建议统一写小写。
+- `author` 必填。缺少 `author` 时插件会被标记为 manifest 无效。
+- 大多数字段重复时采用最后一个值；`rule`、`event`、`method`、`param`、`dependency` 和选择器字段可以重复。
+- 布尔值支持 `true/false`、`1/0`、`yes/no`。
+
+## 常用字段
+
+| Header | 必填 | 示例 | 作用 |
+|---|:---:|---|---|
+| `author` | 是 | `your-name` | 插件作者。建议使用稳定英文或拼音标识。 |
+| `title` | 否 | `订单查询` | 展示名称。 |
+| `description` | 否 | `按订单号查询状态` | 简短说明，让用户知道插件能做什么。 |
+| `version` | 否 | `1.0.0` | 插件版本。 |
+| `runtime` | 否 | `node@22.22.1`、`python@3.12` | 指定运行环境。 |
+| `language` | 否 | `javascript`、`python` | 通常可由文件扩展名自动识别。 |
+| `class` | 否 | `工具` | 分类或展示分组。 |
+| `icon` | 否 | `bot` | 展示图标。 |
+| `disable` | 否 | `true` | 禁用插件。 |
+| `admin` | 否 | `true` | 仅管理员可触发。 |
+| `priority` | 否 | `10` | 触发优先级，数字越高越优先。 |
+
+## 消息触发：rule
+
+`rule` 用来匹配用户消息。你可以写多个 `rule`。
 
 ```js
-//[author: your-name]
-//[runtime: node@22.22.1]
-//[title: Demo]
-//[description: Short description]
-//[rule: demo]
-const { Sender, getSenderID } = require('./middleware.js')
-```
-
-Python plugins use `#`:
-
-```python
-#[author: your-name]
-#[runtime: python@3.12]
-```
-
-## Parsing rules
-
-- Only parse `//[key: value]` or `#[key: value]`.
-- `key` is case-insensitive and normalized to lowercase internally.
-- Most repeated scalar fields use the last value and record a warning.
-- Repeatable fields: `rule`, `event`, `method`, `param`, `dependency`, `imtype`, `imtype+`, `imtype-`, `userid`, `userid+`, `userid-`, `groupid`, `groupid+`, `groupid-`.
-- Unknown fields are preserved in `manifest_extra` and produce a warning.
-- `author` is required to generate `script_id`. Missing `author` marks the manifest invalid.
-
-## Minimal scripts plugin
-
-```js
-//[author: your-name]
-//[title: Hello]
-//[runtime: node@22.22.1]
 //[rule: hello]
-const { Sender, getSenderID } = require('./middleware.js')
+//[rule: 查询 (.+)]
+```
 
+正则捕获的内容可以通过 `sender.param(1)` 读取。
+
+<CodeGroup>
+```js JavaScript
+//[rule: 查询 (.+)]
+const { Sender, getSenderID } = require('./middleware.js')
 const sender = new Sender(getSenderID())
-await sender.reply('hello')
+const keyword = await sender.param(1)
+await sender.reply(`你要查询：${keyword}`)
 ```
 
-## Core fields
-
-| Header | Type | Required | Description |
-|---|---:|:---:|---|
-| `author` | string | yes | Author identifier. Used to generate `script_id`, similar to `<author>:<filename>`. |
-| `title` | string | no | Display title. |
-| `description` | string | no | Short description. |
-| `version` | string | no | Plugin version. |
-| `runtime` | string | no | Runtime, for example `node@22.22.1` or `python@3.12`. |
-| `language` | string | no | Explicit language. Usually inferred from the file extension. |
-| `class` | string | no | Category/display group. |
-| `icon` | string | no | Icon. |
-| `service` | string | no | Service identifier. |
-| `create_at` | string | no | Creation time. |
-| `disable` | boolean | no | Whether disabled. Supports `true/false/1/0/yes/no`. |
-| `admin` | boolean | no | Whether only admins can use it. |
-| `priority` | integer | no | Trigger priority, default `0`. |
-
-## Trigger fields
-
-### rule
-
-```js
-//[rule: hello]
-//[rule: query (.+)]
+```python Python
+#[rule: 查询 (.+)]
+from middleware import Sender, getSenderID
+sender = Sender(getSenderID())
+keyword = sender.param(1)
+sender.reply(f"你要查询：{keyword}")
 ```
+</CodeGroup>
 
-- Repeatable.
-- Used for message triggers.
-- Regex capture params are available through `sender.param(1)`.
+## 事件和定时触发
 
-### event
+| Header | 示例 | 作用 |
+|---|---|---|
+| `event` | `qq-notice-group_decrease-kick` | 监听事件。插件内用 `getEventType()` / `getEventData()` 读取事件信息。 |
+| `cron` | `0 9 * * *` | 定时触发插件。 |
 
-```js
-//[event: qq-notice-group_decrease-kick]
-```
-
-- Repeatable.
-- Used for event triggers.
-- Event data is available through `sender.getEventType()` / `sender.getEventData()`.
-
-### cron
+`cron` 只能写一次。支持常见 5 段表达式，也支持带秒的表达式和 cron 描述符。
 
 ```js
+// 每天 9 点触发
 //[cron: 0 9 * * *]
 ```
 
-- Used for plugin self-triggering.
-- Repeated `cron` headers mark the manifest invalid.
-- Parse failures mark the manifest invalid.
+## 触发范围
 
-### blocking / bypass
-
-```js
-//[blocking: true]
-//[bypass: true]
-```
-
-| Header | Type | Description |
-|---|---:|---|
-| `blocking` | boolean | Block following processing while this plugin handles the event. |
-| `bypass` | boolean | Bypass/special-processing flag, interpreted by current runtime behavior. |
-
-## Selector fields
-
-Restrict where the plugin can trigger.
+用选择器限制插件在哪些 IM、用户或群里生效。
 
 ```js
 //[imtype+: qq,wx]
-//[userid-: user_1,user_2]
-//[groupid+: group_1]
+//[groupid+: 123456]
+//[userid-: 10001,10002]
 ```
 
-| Header | Mode | Description |
+| Header | 模式 | 说明 |
 |---|---|---|
-| `imtype` / `imtype+` | allow | Allow only the specified IM channels. |
-| `imtype-` | deny | Deny the specified IM channels. |
-| `userid` / `userid+` | allow | Allow only the specified users. |
-| `userid-` | deny | Deny the specified users. |
-| `groupid` / `groupid+` | allow | Allow only the specified groups/chats. |
-| `groupid-` | deny | Deny the specified groups/chats. |
+| `imtype` / `imtype+` | 允许名单 | 只允许指定 IM 渠道触发。 |
+| `imtype-` | 排除名单 | 排除指定 IM 渠道。 |
+| `userid` / `userid+` | 允许名单 | 只允许指定用户触发。 |
+| `userid-` | 排除名单 | 排除指定用户。 |
+| `groupid` / `groupid+` | 允许名单 | 只允许指定群或会话触发。 |
+| `groupid-` | 排除名单 | 排除指定群或会话。 |
 
-If allow and deny are both configured for the same selector type, allow wins and a warning is recorded.
+同一类选择器同时写允许名单和排除名单时，按允许名单处理。建议不要混用。
 
-## Plugin params
+## 配置参数：param
 
-`param` is a repeatable JSON line for plugin config items.
+`param` 用 JSON 声明配置项。每一行声明一个配置项。
 
 ```js
 //[param: {"key":"api_key","name":"API Key","type":"secret","required":true,"placeholder":"sk-..."}]
-//[param: {"key":"enabled","name":"Enabled","type":"boolean","default":true}]
-//[param: {"spliter":true,"name":"Advanced settings"}]
+//[param: {"key":"enabled","name":"启用","type":"boolean","default":true}]
+//[param: {"key":"mode","name":"模式","type":"select","options":["fast","safe"],"default":"safe"}]
+//[param: {"spliter":true,"name":"高级设置"}]
 ```
 
-### Param object
+| 字段 | 必填 | 说明 |
+|---|:---:|---|
+| `key` | 是 | 配置键。`spliter: true` 的分隔项不需要。 |
+| `name` | 否 | 展示名称；不填时使用 `key`。 |
+| `desc` | 否 | 配置说明。 |
+| `placeholder` | 否 | 输入框占位提示。 |
+| `required` | 否 | 是否必填。 |
+| `type` | 否 | `string`、`boolean`、`number`、`secret`、`select`。默认 `string`。 |
+| `secret` | 否 | 设为 `true` 时按密钥类型处理。 |
+| `default` | 否 | 默认值。 |
+| `options` | 否 | `select` 的选项。 |
+| `scope` | 否 | `global` 或 `account`。默认 `global`。 |
+| `bind` | 否 | 当前支持 `ingress_token`。 |
+| `spliter` | 否 | 分隔标题，用来组织配置表单。 |
 
-| Field | Type | Required | Description |
-|---|---:|:---:|---|
-| `key` | string | yes, unless `spliter` | Config key. |
-| `name` | string | no | Display name; defaults to `key`. |
-| `desc` | string | no | Description. |
-| `placeholder` | string | no | Input placeholder. |
-| `required` | boolean | no | Whether required. |
-| `bool` | boolean | no | Legacy boolean-param flag; prefer `type: "boolean"` in new docs. |
-| `type` | `string` \| `boolean` \| `number` \| `secret` \| `select` | no | Param type, default `string`. |
-| `secret` | boolean | no | Whether secret; true normalizes `type` to `secret`. |
-| `default` | any | no | Default value. |
-| `options` | array | no | Options for `select`. |
-| `scope` | `global` \| `account` | no | Config scope; default `global`. |
-| `bind` | `ingress_token` | no | Binding purpose. |
-| `spliter` | boolean | no | Separator/title item; does not need `key`. |
+## 依赖：dependency
 
-## Dependencies
-
-`dependency` is a repeatable JSON line.
+用 `dependency` 提前声明插件需要的包。每一行是一个 JSON 对象。
 
 ```js
 //[dependency: {"name":"axios","manager":"npm","version":"1.7.9"}]
 ```
 
-| Field | Type | Required | Description |
-|---|---:|:---:|---|
-| `name` | string | yes | Package name. |
-| `manager` | string | no | Manager, for example `npm`, `pip`, or `go`. |
-| `version` | string | no | Version constraint. |
+```python
+#[dependency: {"name":"httpx","manager":"pip","version":"0.27.2"}]
+```
 
-Code may also use `await middleware.importModule(...)` to install/import Node modules on demand.
+| 字段 | 必填 | 说明 |
+|---|:---:|---|
+| `name` | 是 | 包名。 |
+| `manager` | 否 | 包管理器，例如 `npm`、`pip`、`go`。 |
+| `version` | 否 | 版本号。 |
 
-## Router plugins
+也可以在代码里按需导入：JavaScript 使用 `importModule(...)`，Python 使用 `import_module(...)`。
 
-```js
+## HTTP 路由插件
+
+声明 `router` 后，插件可以处理 HTTP 请求。
+
+<CodeGroup>
+```js JavaScript
 //[author: your-name]
 //[runtime: node@22.22.1]
+//[title: Demo API]
 //[router: /demo/{id}]
 //[method: post]
 const { Sender, getSenderID } = require('./middleware.js')
@@ -186,19 +195,32 @@ const body = await sender.getRouterBody()
 await sender.response({ ok: true, id: params.id, body })
 ```
 
-| Header | Type | Description |
-|---|---:|---|
-| `router` | string | Public route path. Must start with `/`. |
-| `method` | string | `get`, `post`, `put`, `delete`; repeatable or comma-separated. |
-| `server` | string | Service name/group. |
+```python Python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Demo API]
+#[router: /demo/{id}]
+#[method: post]
+from middleware import Sender, getSenderID
 
-Notes:
+sender = Sender(getSenderID())
+params = sender.getRouterParams()
+body = sender.getRouterBody()
+sender.response({"ok": True, "id": params.get("id"), "body": body})
+```
+</CodeGroup>
 
-- Using a reserved public route prefix produces a warning and will not be registered.
-- Dynamic route params are available through `sender.getRouterParams()`.
-- Respond with `sender.response(data)` or `sender.returnValue(text)`.
+| Header | 示例 | 说明 |
+|---|---|---|
+| `router` | `/demo/{id}` | 公开路由路径，必须以 `/` 开头。 |
+| `method` | `get`、`post` | 请求方法。可重复，也可用逗号分隔。支持 `get`、`post`、`put`、`delete`。 |
+| `server` | `demo` | 服务分组名称，可选。 |
 
-## Marketplace fields
+不要使用 `/api`、`/open`、`/healthz` 作为路由前缀。
+
+## Marketplace 字段
+
+如果你要公开发布插件，可以补充这些字段。
 
 ```js
 //[public: true]
@@ -209,77 +231,45 @@ Notes:
 //[auto_renew_default: true]
 ```
 
-| Header | Type | Description |
-|---|---:|---|
-| `public` | boolean | Whether publicly visible. |
-| `open_source` | boolean | Whether open-source visible. |
-| `pin` | boolean | Whether pinned. |
-| `price` | decimal string | One-time price, at most 2 decimal places. |
-| `billing_mode` | `one_time` \| `monthly` | Billing mode. |
-| `monthly_price` | decimal string | Monthly price, at most 2 decimal places. |
-| `auto_renew_default` | boolean | Default auto-renew setting. |
+| Header | 示例 | 说明 |
+|---|---|---|
+| `public` | `true` | 是否公开展示。 |
+| `open_source` | `false` | 是否公开代码内容。 |
+| `pin` | `true` | 是否置顶。 |
+| `price` | `9.90` | 一次性价格，非负，最多两位小数。 |
+| `billing_mode` | `one_time` / `monthly` | 收费模式。 |
+| `monthly_price` | `3.00` | 月付价格，非负，最多两位小数。 |
+| `auto_renew_default` | `true` | 默认是否自动续费。 |
 
-Price fields must be non-negative decimal strings with at most 2 decimal places.
-
-## Adapter-only fields
-
-Ordinary script plugins usually do not need these fields. Adapter plugins live under `plugin/adapters/`.
-
-```js
-//[im_type: qq]
-//[im_type_name: QQ]
-//[adapter_route: qq]
-//[protocol: im]
-//[transport: ws]
-//[receive_mode: duplex]
-//[receive_echo_key: echo]
-//[receive_token_key: access_token]
-//[account_id_key: self_id]
-//[media: {"requires_file_path":true}]
-```
-
-| Header | Type | Description |
-|---|---:|---|
-| `im_type` | string | IM channel code. |
-| `im_type_name` | string | IM channel display name. |
-| `adapter_route` | string | Public adapter route. |
-| `protocol` | string | Protocol type. |
-| `transport` | `http` \| `ws` \| string | Transport. |
-| `adapter_runtime` | string | Current adapter runtime; normalized internally. |
-| `receive_mode` | string | Receive mode. |
-| `receive_echo_key` | string | Echo field. |
-| `receive_token_key` | string | Token field. |
-| `account_id_key` | string | Account ID field. |
-| `media` | object \| string | Media policy, for example `requires_file_path`. |
-
-## Full example
+## 完整示例
 
 ```js
 //[author: demo]
 //[runtime: node@22.22.1]
-//[title: Card claim]
-//[description: Claim card by command]
+//[title: 领卡]
+//[description: 用户发送 claim-card 后领取一次卡密]
 //[version: 1.0.0]
 //[rule: claim-card]
 //[admin: false]
 //[priority: 10]
-//[param: {"key":"period_limit","name":"Period limit","type":"number","default":1}]
-//[param: {"key":"allowed_groups","name":"Allowed groups","placeholder":"Group IDs, comma-separated"}]
+//[param: {"key":"period_limit","name":"周期限制","type":"number","default":1}]
 //[dependency: {"name":"dayjs","manager":"npm"}]
 const { Sender, getSenderID, bucketGet, bucketSet } = require('./middleware.js')
 
 const sender = new Sender(getSenderID())
 const user = await sender.getUserID()
 const claimed = await bucketGet('card_claims', user)
+
 if (claimed) {
-  await sender.reply('Already claimed')
+  await sender.reply('你已经领取过了')
   return
 }
+
 await bucketSet('card_claims', user, String(Date.now()))
-await sender.reply('Claimed successfully')
+await sender.reply('领取成功')
 ```
 
-## Machine-readable schema
+## 机器可读文件
 
-- JSON Schema: [`schemas/plugin-manifest.schema.json`](/plugin-sdk/schemas/plugin-manifest.schema.json)
-- Type declarations: [`types/middleware-js.d.ts`](/plugin-sdk/types/middleware-js.d.ts)
+- JSON Schema：[`schemas/plugin-manifest.schema.json`](/plugin-sdk/schemas/plugin-manifest.schema.json)
+- JavaScript 类型声明：[`types/middleware-js.d.ts`](/plugin-sdk/types/middleware-js.d.ts)

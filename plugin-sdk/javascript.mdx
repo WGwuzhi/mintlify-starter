@@ -1,27 +1,33 @@
 ---
 title: "JavaScript middleware reference"
-description: "Use middleware.js to read context, reply, send media, use storage, handle router requests, and call runtime helpers."
+description: "在 JavaScript 插件中读取上下文、回复消息、发送媒体、保存数据、处理路由和定时任务。"
 ---
 
-`plugin/scripts/middleware.js` is the main SDK for ordinary JavaScript plugins. Plugins use it to read message context, send replies, use storage, wait for input, download files, manage cron commands, and call runtime capabilities.
+`plugin/scripts/middleware.js` 是 JavaScript 普通插件的 SDK。你通过它创建 `Sender`、读取消息上下文、回复文本或媒体、保存数据、下载文件、等待用户输入和管理定时任务。
+
+<Note>
+  新插件优先使用 `const { Sender, getSenderID } = require('./middleware.js')`。不要在插件里硬编码凭据、端口或服务地址。
+</Note>
+
+## 快速开始
 
 ```js
-const middleware = require('./middleware.js')
-const { Sender, Cron, getSenderID } = middleware
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[title: Echo]
+//[rule: echo (.+)]
+const { Sender, getSenderID } = require('./middleware.js')
 
-const sender = new Sender(getSenderID())
-await sender.reply('hello')
+async function main() {
+  const sender = new Sender(getSenderID())
+  const text = await sender.param(1)
+  await sender.reply(text || '请输入内容')
+}
+
+main().catch((error) => console.error(error))
 ```
 
-## Runtime model
-
-- The plugin runtime injects `AUTCLAW_PLUGIN_RUNTIME_TOKEN`, `AUTCLAW_PLUGIN_SCRIPT_ID`, `AUTCLAW_PLUGIN_RUN_ID`, `AUTCLAW_PORT`.
-- `middleware.js` internally calls local `http://127.0.0.1:<port>/api/plugins/runtime/compat`.
-- Plugin code should call middleware methods instead of building runtime tokens or calling runtime APIs directly.
-- Most methods return the response `data` field; failed requests throw `Error`.
-- Default regular request timeout is about `5000ms`, media download/send timeout is about `30000ms`.
-
-## Import pattern
+## 导入方式
 
 ```js
 const {
@@ -38,42 +44,48 @@ const {
 const sender = new Sender(getSenderID())
 ```
 
-## Common types
+常用规则：
+
+- 使用 `Sender` 处理当前消息、当前路由请求或当前事件。
+- 使用顶层函数做全局操作，例如 `bucketGet(...)`、`pushImage(...)`、`fileDownload(...)`。
+- 大多数方法返回运行结果；失败会抛出 `Error`，建议用 `try/catch` 处理。
+
+## 常用返回值
 
 ### SendReceipt
 
-Message sending, media sending, and recall operations usually return a receipt object.
+文本、媒体和撤回类方法通常返回发送回执。
 
-```ts
-type SendReceipt = {
-  ok: boolean
-  message_id?: string
-  messageid?: string
-  message_ids?: string[]
-  raw?: unknown
-  error?: string
-  action?: string
-  [key: string]: unknown
+```json
+{
+  "ok": true,
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
+  "raw": {},
+  "action": "sendText"
 }
 ```
 
-Note: adapters may return extra fields. Prefer `ok !== false` when checking success; accept `message_id` / `messageid`.
+适配器可能返回额外字段。判断失败时优先检查 `receipt.ok === false`，消息 ID 同时兼容 `message_id` 和 `messageid`。
 
-### MediaSource
+### FileDownloadResult
 
-```ts
-type MediaSource =
-  | 'https://...'
-  | 'http://...'
-  | '/absolute/path/file.png'
-  | './relative/path/file.png'
-  | 'base64://...'
-  | 'data:image/png;base64,...'
+`fileDownload(...)` 和 `downloadAdapterFile(...)` 返回本地文件信息。
+
+```json
+{
+  "path": "/opt/autclaw/file/demo.png",
+  "file_path": "/opt/autclaw/file/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
+}
 ```
 
-See [`/plugin-sdk/media`](/plugin-sdk/media).
-
 ### MediaItem
+
+`sender.getMediaItems()` 返回当前事件或最近一次 `listen/input` 捕获到的媒体项。
 
 ```ts
 type MediaItem = {
@@ -88,533 +100,287 @@ type MediaItem = {
   filename?: string
   mime_type?: string
   mimeType?: string
-  caption?: string
-  cover?: string
-  platform_payload?: Record<string, unknown>
-  [key: string]: unknown
 }
 ```
 
-`sender.getMediaItems()` returns media from the current event or the latest `listen/input` capture. Pass file items to `downloadAdapterFile(...)`.
+把用户上传的文件项传给 `downloadAdapterFile(...)`，不要手动解析平台原始字段。
 
-### TargetOptions
+## Sender
 
-```ts
-type TargetOptions = {
-  imType?: string
-  imtype?: string
-  im_type?: string
-  accountID?: string
-  accountId?: string
-  account_id?: string
-  sessionType?: 'private' | 'group' | string
-  userID?: string
-  userId?: string
-  user_id?: string
-  groupID?: string
-  groupId?: string
-  group_id?: string
-  chatID?: string
-  chatId?: string
-  chat_id?: string
-}
-```
-
-### MediaOptions
-
-```ts
-type MediaOptions = {
-  caption?: string
-  filename?: string
-  fileName?: string
-  file_name?: string
-  mimeType?: string
-  mime_type?: string
-  cover?: string
-  target?: TargetOptions
-  constraints?: Record<string, unknown>
-  options?: Record<string, unknown>
-  timeout?: number
-}
-```
-
-## Global helpers
-
-### getSenderID
-
-```js
-const senderID = getSenderID()
-```
-
-Returns: `string`
-
-Returns the sender ID for the current run. Most message-context methods need it:
+创建一个 `Sender`：
 
 ```js
 const sender = new Sender(getSenderID())
 ```
 
-### accessService
+### 读取消息上下文
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getImtype()` | `Promise<string>` | 当前 IM 类型。 |
+| `getUserID()` | `Promise<string>` | 当前用户 ID。 |
+| `getUserName()` | `Promise<string>` | 当前用户昵称。 |
+| `getUserAvatarUrl()` | `Promise<string>` | 当前用户头像 URL。 |
+| `getChatID()` | `Promise<string>` | 当前会话 ID。 |
+| `getChatName()` | `Promise<string>` | 当前会话名称。 |
+| `getGroupName()` | `Promise<string>` | 群名，等同于会话名称。 |
+| `isAdmin()` | `Promise<boolean>` | 当前用户是否为管理员。 |
+| `isAI()` | `Promise<boolean>` | 当前消息是否来自 AI 触发上下文。 |
+| `getAIParam()` | `Promise<string>` | AI 参数。 |
+| `getMessage()` | `Promise<string>` | 当前消息文本。 |
+| `getMessageID()` | `Promise<string>` | 当前消息 ID。 |
+| `getHistoryMessageIDs(number)` | `Promise<string[]>` | 最近消息 ID。 |
+| `param(index)` | `Promise<string>` | 读取 `rule` 正则捕获，`index` 从 `1` 开始。 |
 
 ```js
-const data = await middleware.accessService(path, body?, timeout?)
+const user = await sender.getUserName()
+const message = await sender.getMessage()
+await sender.reply(`${user} 发送了：${message}`)
 ```
 
-Parameters:
-
-| Name | Type | Required | Description |
-|---|---:|:---:|---|
-| `path` | `string` | yes | Runtime compatibility action, for example `/version`, `/bucketGet`, `/sendText`. |
-| `body` | `object` | no | Request body. `script_id` / `run_id` are added automatically. `script_id` / `run_id`. |
-| `timeout` | `number` | no | Axios timeout in milliseconds. |
-
-Returns: `Promise<any>`
-
-Recommendation: ordinary plugins should prefer concrete methods. Use `accessService` only for runtime actions that do not have a documented helper yet.
-
-### importModule
+### 回复文本和媒体
 
 ```js
-const dayjs = await middleware.importModule('dayjs')
-const lodash = await middleware.importModule('lodash', '4.17.21')
-const got = await middleware.importModule('got', { package: 'got', version: '14.4.2', manager: 'npm' })
-```
-
-Parameters:
-
-| Name | Type | Required | Description |
-|---|---:|:---:|---|
-| `module` | `string` | yes | Module name used by `require(module)`. |
-| `versionOrOptions` | `string \| object` | no | Version string, or `{ package, version, manager }`. |
-| `manager` | `string` | no | Dependency manager. Common value: `npm`. |
-
-Returns: `Promise<any>` with the result of `require(module)`.
-
-Notes:
-
-- If `module` is empty, the method throws.
-- It asks runtime to ensure the dependency first, then calls `require`.
-- If the package name differs from the import name, use `{ package: 'real-package-name' }`.
-
-## File helpers
-
-### fileDownload
-
-```js
-const file = await middleware.fileDownload(url, path?)
-```
-
-Parameters:
-
-| Name | Type | Required | Description |
-|---|---:|:---:|---|
-| `url` | `string` | yes | `http(s)`, `base64://...`, or `data:*;base64,...`. |
-| `path` | `string` | no | Target directory. If omitted, the file is saved under runtime `file`; relative paths are saved under `file/<path>`; absolute paths are used as provided. |
-
-Returns:
-
-```json
-{
-  "path": "/opt/autclaw/plugin/.media/demo.png",
-  "file_path": "/opt/autclaw/plugin/.media/demo.png",
-  "file_name": "demo.png",
-  "mime_type": "image/png",
-  "file_size": 12345
-}
-```
-
-Errors:
-
-- If `url` is empty, the method throws.
-- Oversized, unsafe, or unreachable sources throw runtime errors.
-
-### downloadAdapterFile
-
-```js
-const file = await middleware.downloadAdapterFile(fileItem, { path: 'imports' })
-```
-
-Parameters:
-
-| Name | Type | Required | Description |
-|---|---:|:---:|---|
-| `file` | `MediaItem \| object \| string` | yes | File media item from the current event, or a file reference resolvable by the adapter. |
-| `options` | `object \| number` | no | Common: `{ path, file_name, mime_type }`. If a number is passed, it is treated as timeout. |
-| `timeout` | `number` | no | Timeout in milliseconds. |
-
-Returns: same as `fileDownload(...)`. It may additionally include:
-
-```json
-{
-  "ok": true,
-  "url": "https://adapter.example/file?id=...",
-  "action": "resolveFileURL"
-}
-```
-
-Example:
-
-```js
-const items = await sender.getMediaItems()
-const fileItem = items.find((item) => item.type === 'file')
-if (!fileItem) {
-  await sender.reply('Please send a file')
-  return
-}
-const downloaded = await middleware.downloadAdapterFile(fileItem, { path: 'imports' })
-await sender.reply(`Saved: ${downloaded.file_name}`)
-```
-
-Notes:
-
-- Directly downloadable `http/data/base64` sources are downloaded directly.
-- Platform file references are resolved by the backend through the current adapter.
-- Plugins should not parse platform-specific private fields such as NapCat/QX internals.
-
-### getGroupMemberList
-
-```js
-const result = await middleware.getGroupMemberList(groupIDOrOptions?, options?, timeout?)
-```
-
-Parameters:
-
-| Name | Type | Required | Description |
-|---|---:|:---:|---|
-| `groupIDOrOptions` | `string \| object` | no | Group ID, or a full options object. |
-| `options` | `object \| number` | no | Extra options, or timeout. |
-| `timeout` | `number` | no | Timeout in milliseconds. |
-
-Accepted option aliases:
-
-- Group: `group_id`, `groupID`, `groupId`, `groupCode`, `group_code`, `group`, `chat_id`, `chatID`
-- IM type: `imType`, `im_type`
-- Account: `accountID`, `account_id`
-- Cache: `noCache`, `no_cache`
-
-Returns:
-
-```json
-{
-  "ok": true,
-  "im_type": "qq",
-  "account_id": "bot_1",
-  "group_id": "123456",
-  "members": [
-    {
-      "group_id": "123456",
-      "user_id": "10001",
-      "nickname": "Alice",
-      "card": "Alice",
-      "display_name": "Alice",
-      "role": "member"
-    }
-  ]
-}
-```
-
-If `group_id` is omitted in a group message context, runtime may use the current chat. Outside group context, missing group ID is invalid.
-
-## Message and push helpers
-
-### Sender constructor
-
-```js
-const sender = new Sender(getSenderID())
-```
-
-`Sender` binds all context-aware operations to the current run. Use one instance per plugin run.
-
-### Text replies
-
-```js
-await sender.reply('text')
-await sender.replyMarkdown('# Title')
-const value = await sender.returnValue('ok')
-```
-
-| Method | Parameters | Returns | Use |
-|---|---|---|---|
-| `reply(text)` | `text: string` | `Promise<SendReceipt>` | Reply with plain text. |
-| `replyMarkdown(markdown)` | `markdown: string` | `Promise<SendReceipt>` | Reply with Markdown. |
-| `returnValue(text)` | `text: string` | `Promise<any>` | Set the run return value, commonly used by router/internal calls. |
-
-### Media replies
-
-```js
+await sender.reply('普通文本')
+await sender.replyMarkdown('# 标题')
 await sender.replyImage('https://example.com/a.png')
 await sender.replyVoice('./voice.wav')
 await sender.replyVideo('./demo.mp4')
 await sender.replyFile('./report.csv', { filename: 'report.csv' })
 await sender.replyMixed([
-  { type: 'text', text: 'Result:' },
-  { type: 'image', source: 'base64://...' }
+  { type: 'text', text: '结果：' },
+  { type: 'image', source: './result.png' },
 ])
 ```
 
-| Method | Signature | Returns |
+| 方法 | 参数 | 返回 |
 |---|---|---|
-| `replyImage` | `(source, options?)` | `Promise<SendReceipt>` |
-| `replyVoice` | `(source, options?)` | `Promise<SendReceipt>` |
-| `replyVideo` | `(source, options?)` | `Promise<SendReceipt>` |
-| `replyFile` | `(source, options?)` | `Promise<SendReceipt>` |
-| `replyMixed` | `(items, options?)` | `Promise<SendReceipt>` |
+| `reply(text)` | `string` | `Promise<SendReceipt>` |
+| `replyMarkdown(markdown)` | `string` | `Promise<SendReceipt>` |
+| `replyImage(source, options?)` | 媒体来源 | `Promise<SendReceipt>` |
+| `replyVoice(source, options?)` | 媒体来源 | `Promise<SendReceipt>` |
+| `replyVideo(source, options?)` | 媒体来源 | `Promise<SendReceipt>` |
+| `replyFile(source, options?)` | 媒体来源 | `Promise<SendReceipt>` |
+| `replyMixed(items, options?)` | mixed 数组 | `Promise<SendReceipt>` |
+| `returnValue(text)` | `string` | 运行结果 |
 
-`replyMixed` supports text/markdown/image/voice/video/file items. For media items, `source`, `file`, `url`, and `path` are normalized into standard `media.source`.
+媒体来源和 mixed 写法见 [`Media sending`](/plugin-sdk/media)。
 
-### Recall and flow control
+### 控制流程
 
-```js
-const receipt = await sender.reply('will recall later')
-await sender.recallMessage(receipt.message_id)
-await sender.breakIn('new message content')
-await sender.setContinue()
-```
-
-| Method | Parameters | Returns | Use |
-|---|---|---|---|
-| `recallMessage(messageid)` | `string` | `Promise<SendReceipt>` | Recall a message. |
-| `breakIn(content)` | `string` | `Promise<any>` | Simulate a new message and re-enter autClaw processing. |
-| `setContinue()` | none | `Promise<boolean>` | Mark that following handlers may continue. |
-
-### Push APIs
-
-```js
-await middleware.push('qq', 'group_1', '', 'Title', 'Content')
-await middleware.pushImage('qq', 'group_1', '', 'Image', 'https://example.com/a.png')
-await middleware.pushMixed('qq', 'group_1', '', 'Mixed message', [
-  { type: 'text', text: 'hello' },
-  { type: 'image', source: './a.png' }
-])
-```
-
-| Function | Signature | Returns |
+| 方法 | 参数 | 说明 |
 |---|---|---|
-| `push` | `(imType, groupCode, userID, title, content)` | `void` in the current JS helper; it starts the runtime request without returning its result. |
-| `pushImage` | `(imType, groupCode, userID, title, imageUrl)` | `Promise<any>` |
-| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl)` | `Promise<any>` |
-| `pushVideo` | `(imType, groupCode, userID, title, videoUrl)` | `Promise<any>` |
-| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?)` | `Promise<any>` |
-| `pushMixed` | `(imType, groupCode, userID, title, items)` | `Promise<any>` |
-
-`push*` is for proactive sending and is not necessarily bound to the current sender. Prefer explicit `imType` and target.
-
-## Sender context getters
-
-### Message/user/chat
+| `setContinue()` | 无 | 允许继续匹配后续插件。 |
+| `recallMessage(messageid)` | 消息 ID | 撤回消息。 |
+| `breakIn(content)` | 文本 | 把新文本重新送入消息处理。 |
 
 ```js
-const imType = await sender.getImtype()
-const userID = await sender.getUserID()
-const userName = await sender.getUserName()
-const chatID = await sender.getChatID()
-const chatName = await sender.getChatName()
-const text = await sender.getMessage()
+if (await sender.isAdmin()) {
+  await sender.setContinue()
+}
 ```
 
-| Method | Returns | Description |
+### 等待输入和支付
+
+| 方法 | 参数 | 返回 |
 |---|---|---|
-| `getImtype()` | `Promise<string>` | Current IM channel. |
-| `getUserID()` | `Promise<string>` | Current user ID. Some legacy scenarios may return an encoded ID. |
-| `getUserName()` | `Promise<string>` | Current user name. |
-| `getUserAvatarUrl()` | `Promise<string>` | Current user avatar URL. |
-| `getChatID()` | `Promise<string>` | Current chat/group ID. |
-| `getChatName()` | `Promise<string>` | Current chat/group name. |
-| `getGroupName()` | `Promise<string>` | Compatibility alias for `getChatName()`. |
-| `isAdmin()` | `Promise<boolean>` | Whether the current user is an admin. |
-| `isAI()` | `Promise<boolean>` | Whether the current message is in an AI context. |
-| `getAIParam()` | `Promise<string>` | AI parameter. |
-| `getMessage()` | `Promise<string>` | Current message text. |
-| `getMessageID()` | `Promise<string>` | Current message ID. |
-| `getHistoryMessageIDs(number)` | `Promise<string[]>` | Historical message ID list. |
-| `middleware.getHistoryMessages(imtype)` | `Promise<any[]>` | Historical messages for the given IM channel, up to about the latest 100. |
-
-### Rule params
+| `listen(waitTime, recallTime?, scope?)` | 等待毫秒数，可选撤回毫秒数，可选 `group` | 用户输入、事件对象或超时标记。 |
+| `input(waitTime, recallTime?, scope?)` | 同 `listen` | 用户输入、事件对象或超时标记。 |
+| `waitPay(exitcode, timeout, amount?)` | 订单标识、超时毫秒数、可选金额 | `timeout` / `busy` / 支付成功对象。 |
+| `atWaitPay()` | 无 | 是否处于等待支付状态。 |
 
 ```js
-// //[rule: query (.+)]
-const keyword = await sender.param(1)
+await sender.reply('请在 60 秒内发送验证码')
+const code = await sender.input(60000)
+await sender.reply(`收到：${typeof code === 'string' ? code : JSON.stringify(code)}`)
 ```
 
-`param(index)` uses 1-based indexes. Missing values return an empty string.
+如果允许同群任意成员回答，把第三个参数设为 `'group'`：
 
-### Router request context
+```js
+const answer = await sender.input(60000, 0, 'group')
+```
 
-Router plugins are declared through manifest headers:
+`listen(waitTime, 'group')` 也会把第二个字符串参数识别为作用域。
+
+### 事件和媒体项
+
+| 方法 | 返回 | 说明 |
+|---|---|---|
+| `getPluginName()` | `Promise<string>` | 当前插件名称。 |
+| `getPluginVersion()` | `Promise<string>` | 当前插件版本。 |
+| `getEventType()` | `Promise<string>` | 当前事件类型。 |
+| `setEventType(eventType)` | `Promise<boolean>` | 设置事件类型。 |
+| `getEventData()` | `Promise<any>` | 当前事件数据。 |
+| `setEventData(eventData)` | `Promise<boolean>` | 设置事件数据。 |
+| `getMediaItems()` | `Promise<MediaItem[]>` | 当前事件或最近一次等待输入捕获到的媒体。 |
+
+```js
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+```
+
+### HTTP 路由请求
+
+在 manifest 中声明 `router` 和 `method` 后，可以用这些方法读取请求并响应。
 
 ```js
 //[router: /demo/{id}]
 //[method: post]
-```
+const { Sender, getSenderID } = require('./middleware.js')
 
-Read the request:
-
-```js
-const path = await sender.getRouterPath()
+const sender = new Sender(getSenderID())
 const params = await sender.getRouterParams()
-const method = await sender.getRouterMethod()
-const headers = await sender.getRouterHeaders()
-const cookies = await sender.getRouterCookies()
 const body = await sender.getRouterBody()
-await sender.response({ ok: true, id: params.id })
+await sender.response({ ok: true, id: params.id, body })
 ```
 
-| Method | Returns |
-|---|---|
-| `getRouterPath()` / exported `getRouter()` | `Promise<string>` |
-| `getRouterParams()` | `Promise<Record<string, string>>` |
-| `getRouterMethod()` / exported `getMethod()` | `Promise<string>` |
-| `getRouterHeaders()` | `Promise<Record<string, string \| string[]>>` |
-| `getRouterCookies()` | `Promise<Record<string, string>>` |
-| `getRouterBody()` | `Promise<any>` |
-| `getRouterData()` / exported `getRouterData()` | `Promise<string>` JSON string |
-| `response(data)` | `Promise<boolean>` |
-
-### Event context
-
-```js
-const type = await sender.getEventType()
-const data = await sender.getEventData()
-const media = await sender.getMediaItems()
-await sender.setEventData({ handled: true })
-```
-
-| Method | Returns | Description |
+| 方法 | 返回 | 说明 |
 |---|---|---|
-| `getEventType()` | `Promise<string>` | Current event type. |
-| `setEventType(eventType)` | `Promise<boolean>` | Update the current run event type. |
-| `getEventData()` | `Promise<any>` | Current event data, default `{}`. |
-| `setEventData(eventData)` | `Promise<boolean>` | Update current run event data. |
-| `getMediaItems()` | `Promise<MediaItem[]>` | Media from the current event or the latest listen/input capture. |
-| `getPluginName()` | `Promise<string>` | Current plugin title or name. |
-| `getPluginVersion()` | `Promise<string>` | Current plugin version. |
+| `getRouterPath()` / `getRouter()` | `Promise<string>` | 当前路由路径。 |
+| `getRouterParams()` | `Promise<Record<string, string>>` | 路由参数。 |
+| `getRouterMethod()` / `getMethod()` | `Promise<string>` | 请求方法。 |
+| `getRouterHeaders()` | `Promise<object>` | 请求头。 |
+| `getRouterCookies()` | `Promise<object>` | Cookie。 |
+| `getRouterBody()` | `Promise<any>` | 请求体。 |
+| `getRouterData()` | `Promise<string>` | 请求体 JSON 字符串。 |
+| `response(data)` | `Promise<boolean>` | 返回 JSON 数据。 |
 
-## Storage APIs
+## 存储
 
-### Default bucket helpers
+### 默认存储
+
+默认存储适合保存少量插件状态。
 
 ```js
-await middleware.set('key', 'value')
-const value = await middleware.get('key')
-await middleware.del('key')
+await set('last_user', '10001')
+const user = await get('last_user')
+await del('last_user')
 ```
 
-These helpers operate on the default `otto` bucket.
-
-| Function | Signature | Returns |
+| 函数 | 参数 | 返回 |
 |---|---|---|
-| `get` | `(key)` | `Promise<any>` |
-| `set` | `(key, value)` | `Promise<any>` |
-| `del` | `(key)` | `Promise<any>` |
+| `get(key)` | `string` | `Promise<string>`，不存在时返回空字符串。 |
+| `set(key, value)` | key + 字符串值 | `Promise<boolean>` |
+| `del(key)` | `string` | `Promise<boolean>` |
 
-### Named bucket helpers
+<Warning>
+  当前存储会把 `value` 按字符串保存。需要保存对象时，请先 `JSON.stringify(...)`，读取后再 `JSON.parse(...)`。
+</Warning>
+
+### 命名 bucket
 
 ```js
-await middleware.bucketSet('my_plugin', 'config', JSON.stringify({ enabled: true }))
-const raw = await middleware.bucketGet('my_plugin', 'config')
-const keys = await middleware.bucketAllKeys('my_plugin')
-const all = await middleware.bucketAll('my_plugin')
+await bucketSet('my_plugin', 'config', JSON.stringify({ enabled: true }))
+const raw = await bucketGet('my_plugin', 'config')
+const keys = await bucketAllKeys('my_plugin')
+const all = await bucketAll('my_plugin')
 ```
 
-| Function / Sender method | Signature | Returns |
+| 函数 / Sender 方法 | 参数 | 返回 |
 |---|---|---|
-| `bucketGet` | `(bucket, key)` | `Promise<any>` |
-| `bucketSet` | `(bucket, key, value)` | `Promise<any>` |
-| `bucketDel` | `(bucket, key)` | `Promise<any>` |
-| `bucketKeys` | `(bucket, value?)` | `Promise<string[]>` |
-| `bucketAllKeys` | `(bucket)` | `Promise<string[]>` |
-| `bucketAll` | `(bucket)` | `Promise<Record<string, any>>` |
+| `bucketGet(bucket, key)` | bucket + key | `Promise<string>`，不存在时返回空字符串。 |
+| `bucketSet(bucket, key, value)` | bucket + key + 字符串值 | `Promise<boolean>` |
+| `bucketDel(bucket, key)` | bucket + key | `Promise<boolean>` |
+| `bucketKeys(bucket?, value?)` | bucket 和可选值过滤 | `Promise<string[]>` |
+| `bucketAllKeys(bucket)` | bucket | `Promise<string[]>` |
+| `bucketAll(bucket)` | bucket | `Promise<Record<string, string>>` |
 
-`Sender` instances provide the same methods and include `senderid`. For global config, prefer `middleware.bucket*`; for data strongly tied to the current session, use `sender.bucket*`.
+`Sender` 也提供同名 bucket 方法，适合想把调用绑定到当前会话上下文的场景。
 
-## Wait/input/payment APIs
+## 文件和媒体工具
 
-### listen / input
-
-```js
-const text = await sender.listen(30000)
-const groupText = await sender.input(60000, 0, 'group')
-const textAndRecall = await sender.listen(30000, 5000)
-```
-
-Parameters:
-
-| Name | Type | Required | Description |
-|---|---:|:---:|---|
-| `waitTime` | `number` | yes | Wait timeout in milliseconds. |
-| `recallTime` | `number \| string` | no | Delayed recall time; if `'group'` is passed, any member in the group may answer. |
-| `scope` | `string` | no | Only `'group'` is effective. |
-
-Returns: `Promise<any>`
-
-Common returns: user input text, event object, or timeout/busy marker. The exact shape depends on the event type.
-
-### waitPay / atWaitPay
+| 函数 | 参数 | 返回 |
+|---|---|---|
+| `fileDownload(url, path?)` | 下载远程 URL、`base64://...` 或 data URI | `Promise<FileDownloadResult>` |
+| `downloadAdapterFile(file, options?, timeout?)` | 下载用户上传的文件项 | `Promise<FileDownloadResult>` |
+| `getGroupMemberList(groupIDOrOptions?, options?, timeout?)` | 获取群成员列表 | 群成员列表对象 |
 
 ```js
-const result = await sender.waitPay('order_123', 120000, '9.90')
-if (result === 'timeout') {
-  await sender.reply('payment timeout')
-} else {
-  await sender.reply(`payment success: ${result.money || result.Money}`)
+const downloaded = await fileDownload('https://example.com/a.png', 'images')
+await sender.replyImage(downloaded.path)
+
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+if (fileItem) {
+  const saved = await downloadAdapterFile(fileItem, { path: 'imports' })
+  await sender.reply(`已保存：${saved.file_name}`)
 }
 ```
 
-| Method | Signature | Returns |
+更多媒体说明见 [`Media sending`](/plugin-sdk/media)。
+
+## 主动推送
+
+主动推送不依赖当前 `Sender`，需要指定 IM 类型、群和用户。
+
+| 函数 | 参数 | 说明 |
 |---|---|---|
-| `waitPay` | `(exitcode, timeout, amount?)` | `Promise<string \| object>` |
-| `atWaitPay` | `()` | `Promise<boolean>` |
+| `push(imType, groupCode, userID, title, content)` | 目标 + 标题 + 文本 | 推送文本。当前 helper 不返回结果。 |
+| `pushImage(imType, groupCode, userID, title, imageUrl)` | 目标 + 图片 | 推送图片。 |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | 目标 + 语音 | 推送语音。 |
+| `pushVideo(imType, groupCode, userID, title, videoUrl)` | 目标 + 视频 | 推送视频。 |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options?)` | 目标 + 文件 | 推送文件。 |
+| `pushMixed(imType, groupCode, userID, title, items)` | 目标 + mixed items | 推送混合消息。 |
 
-Payment success returns an object with amount fields such as `money` / `Money`. Timeout or busy states can still be strings for compatibility.
+```js
+await pushImage('qq', '123456', '', '日报', './daily.png')
+```
 
-## Cron APIs
+## 依赖和工具函数
+
+### importModule
+
+```js
+const dayjs = await importModule('dayjs')
+const lodash = await importModule('lodash', '4.17.21')
+const axios = await importModule('axios', { package: 'axios', version: '1.7.9', manager: 'npm' })
+```
+
+`importModule(module, versionOrOptions?, manager?)` 会先确保依赖可用，再返回 `require(module)` 的结果。包名与导入名不一致时，使用 `{ package: '真实包名' }`。
+
+### 系统和实用函数
+
+| 函数 | 返回 | 说明 |
+|---|---|---|
+| `render(template, selector, data)` | 渲染结果 | 渲染 HTML/template，常用于生成图片。 |
+| `getActiveImtypes()` | `Promise<string[]>` | 当前启用的 IM 类型。 |
+| `name()` | `Promise<string>` | 机器人名称。 |
+| `domain()` | `Promise<string>` | 域名或公网地址。 |
+| `port()` | `Promise<string \| number>` | 服务端口。 |
+| `machineId()` | `Promise<string>` | 机器 ID。 |
+| `version()` | `Promise<string>` | autClaw 版本。 |
+| `versionInfo()` | `Promise<object>` | 结构化版本信息。 |
+| `notifyMasters(content, imtypes?)` | 运行结果 | 通知管理员。 |
+| `coffee()` | `Promise<boolean>` | 咖啡码激活状态。 |
+| `spread(msg)` | 运行结果 | 推广转链。 |
+| `getHistoryMessages(imtype?)` | 历史消息列表 | 获取最近历史消息。 |
+| `generateFromSinglePrompt(prompt)` | `Promise<string>` | 根据单条 prompt 生成文本。 |
+
+## Cron
+
+`Cron` 用来管理运行中的定时指令。它不同于 manifest 里的 `cron`：manifest `cron` 用来让当前插件自触发；`Cron` 类用来增删改查运行时定时指令。
 
 ```js
 const cron = new Cron()
-const list = await cron.getCrons()
-const id = await cron.addCron('0 9 * * *', false, 'daily reminder', true)
-await cron.updateCron(id, '0 10 * * *', false, 'daily reminder', true)
-await cron.delCron(id)
+const items = await cron.getCrons()
+const item = await cron.getCron(1)
+cron.addCron('0 9 * * *', false, 'daily reminder', true, null, '每日提醒', '', '', '')
+cron.updateCron(1, '0 10 * * *', false, 'daily reminder', true, null, '每日提醒', '', '', '')
+cron.delCron(1)
 ```
 
-| Method | Signature | Returns |
+| 方法 | 参数 | 返回 |
 |---|---|---|
-| `getCrons()` | `()` | `Promise<any[]>` |
-| `getCron(id)` | `(id)` | `Promise<any>` |
-| `addCron` | `(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | `void` in the current JS helper; starts the runtime request. |
-| `updateCron` | `(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | `void` in the current JS helper; starts the runtime request. |
-| `delCron(id)` | `(id)` | `void` in the current JS helper; starts the runtime request. |
+| `getCrons()` | 无 | 定时指令列表。 |
+| `getCron(id)` | ID | 单个定时指令。 |
+| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | 定时配置 | 当前 JS helper 发起请求但不返回结果。 |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 更新配置 | 当前 JS helper 发起请求但不返回结果。 |
+| `delCron(id)` | ID | 当前 JS helper 发起请求但不返回结果。 |
 
-`cron` expressions are validated by the project cron parser. Manifest `//[cron: ...]` is used for plugin self-triggering; the `Cron` class manages runtime cron commands.
+## 群管理
 
-## System/info helpers
-
-```js
-const appName = await middleware.name()
-const publicDomain = await middleware.domain()
-const runtimePort = await middleware.port()
-const machine = await middleware.machineId()
-const version = await middleware.version()
-const info = await middleware.versionInfo()
-const imtypes = await middleware.getActiveImtypes()
-```
-
-| Function | Returns | Description |
-|---|---|---|
-| `name()` | `Promise<string>` | Bot name. |
-| `domain()` | `Promise<string>` | Bot domain or public address. |
-| `port()` | `Promise<string \| number>` | autClaw built-in port. |
-| `machineId()` | `Promise<string>` | Machine ID. |
-| `version()` | `Promise<string>` | autClaw version. |
-| `versionInfo()` | `Promise<object>` | Structured version info. |
-| `getActiveImtypes()` | `Promise<string[]>` | Current active IM channels. |
-| `notifyMasters(content, imtypes?)` | `Promise<any>` | Notify masters/admins. |
-| `coffee()` | `Promise<boolean>` | Current coffee-code activation state. |
-| `spread(msg)` | `Promise<any>` | JD/Taobao/PDD promotion link conversion. |
-| `generateFromSinglePrompt(prompt)` | `Promise<string>` | Generate text from one LLM prompt. |
-| `render(template, selector, data)` | `Promise<any>` | Render an HTML/template fragment. |
-
-## Group management helpers
+这些方法取决于当前 IM 平台支持情况；不支持时可能无效果或返回错误。
 
 ```js
 await sender.groupInviteIn(friendID, groupID)
@@ -623,38 +389,33 @@ await sender.groupBan(userID, 600)
 await sender.groupUnban(userID)
 await sender.groupWholeBan()
 await sender.groupWholeUnban()
-await sender.groupNoticeSend('notice content')
+await sender.groupNoticeSend('公告内容')
 ```
 
-These methods depend on the current adapter capability. In the current JS helper, group management methods start the runtime request without returning its result. Unsupported adapters may return an error or no effect.
-
-## Recommended plugin template
+## 推荐模板
 
 ```js
 //[author: your-name]
 //[runtime: node@22.22.1]
-//[title: Echo]
-//[description: Reply with user message]
-//[rule: echo (.+)]
+//[title: Safe template]
+//[rule: demo (.+)]
 const { Sender, getSenderID } = require('./middleware.js')
 
 async function main() {
   const sender = new Sender(getSenderID())
   const value = await sender.param(1)
-  await sender.reply(value || 'Please enter content')
+  await sender.reply(value || '请输入内容')
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error && error.stack ? error.stack : error)
 })
 ```
 
-## Common mistakes
+## 常见错误
 
-- Do not hard-code runtime tokens in plugin code.
-- Do not call `/api/plugins/runtime/*` directly; use middleware methods.
-- Do not read large bucket data all at once; prefer key-based reads.
-- Do not parse adapter-private file fields; use `getMediaItems()` + `downloadAdapterFile()`.
-- Do not manually call prepare/cleanup for media; ordinary plugins use `replyImage/replyVoice/replyVideo/replyFile/replyMixed`.
-- `sender.param(index)` starts from `1`, not `0`.
-- When any group member may answer, pass `'group'` as the third argument to `listen/input`.
+- `sender.param(1)` 从 `1` 开始，不是 `0`。
+- `set(...)` / `bucketSet(...)` 保存字符串；对象请手动 JSON 序列化。
+- 不要绕过 SDK 直接请求 autClaw 服务；优先使用本页方法。
+- 下载用户上传文件时，使用 `sender.getMediaItems()` + `downloadAdapterFile(...)`。
+- 大文件和媒体发送失败时，检查回执里的 `error` 并给用户明确提示。

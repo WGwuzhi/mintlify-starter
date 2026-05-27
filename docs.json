@@ -49,21 +49,7 @@
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "GitHub",
-          "href": "https://github.com/WGwuzhi/autClaw",
-          "icon": "github"
-        },
-        {
-          "anchor": "Source",
-          "href": "https://github.com/WGwuzhi/autClaw-Codebase",
-          "icon": "code"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/logo/light.svg",
