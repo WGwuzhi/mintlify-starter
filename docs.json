@@ -14,7 +14,7 @@
   "navigation": {
     "languages": [
       {
-        "language": "cn",
+        "language": "zh-Hans",
         "default": true,
         "navbar": {
           "links": [
@@ -208,6 +208,30 @@
       "destination": "/cn"
     },
     {
+      "source": "/zh",
+      "destination": "/cn"
+    },
+    {
+      "source": "/zh/:slug*",
+      "destination": "/cn/:slug*"
+    },
+    {
+      "source": "/zh-hans",
+      "destination": "/cn"
+    },
+    {
+      "source": "/zh-hans/:slug*",
+      "destination": "/cn/:slug*"
+    },
+    {
+      "source": "/zh-cn",
+      "destination": "/cn"
+    },
+    {
+      "source": "/zh-cn/:slug*",
+      "destination": "/cn/:slug*"
+    },
+    {
       "source": "/getting-started/:slug*",
       "destination": "/cn/getting-started/:slug*"
     },
@@ -219,5 +243,31 @@
       "source": "/plugin-sdk/:slug*",
       "destination": "/cn/plugin-sdk/:slug*"
     }
-  ]
+  ],
+  "description": "autClaw 文档：部署 Linux / Docker 服务，管理运行时，并使用 JavaScript 或 Python 开发插件。",
+  "seo": {
+    "indexing": "navigable",
+    "metatags": {
+      "canonical": "https://ac-d39c0861.mintlify.app",
+      "robots": "index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1",
+      "og:site_name": "autClaw Docs",
+      "twitter:card": "summary_large_image",
+      "application-name": "autClaw Docs",
+      "apple-mobile-web-app-title": "autClaw Docs",
+      "theme-color": "#2563EB"
+    }
+  },
+  "search": {
+    "prompt": "搜索 autClaw 文档..."
+  },
+  "metadata": {
+    "timestamp": true
+  },
+  "errors": {
+    "404": {
+      "redirect": false,
+      "title": "页面未找到",
+      "description": "你访问的页面不存在。返回 [中文首页](/cn) 或切换到 [English home](/en)。"
+    }
+  }
 }
