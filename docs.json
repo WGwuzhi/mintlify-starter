@@ -38,6 +38,7 @@
                 "group": "开始使用",
                 "pages": [
                   "cn/index",
+                  "cn/features",
                   "cn/getting-started/deploy",
                   "cn/getting-started/upgrade",
                   "cn/getting-started/runtime-paths"

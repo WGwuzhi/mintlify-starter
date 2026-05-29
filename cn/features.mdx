@@ -1,0 +1,131 @@
+---
+title: "功能介绍"
+sidebarTitle: "功能介绍"
+description: "了解 autClaw 的多渠道接入、插件开发、运行时管理、插件市场、支付和运维能力。"
+keywords: ["autClaw 功能", "机器人平台", "插件市场", "IM 适配器", "插件开发"]
+icon: "sparkles"
+mode: "wide"
+---
+
+autClaw 是一个可自部署的自动化机器人和插件运行平台。你把服务部署到 Linux / Docker 后，就可以在 Web 控制台接入 IM 账号、编写插件、安装市场插件、配置支付，并查看运行状态。
+
+<Info>
+  想先跑起来？按 [部署 autClaw](/cn/getting-started/deploy) 启动服务，然后访问 `http://服务器IP:8200`。
+</Info>
+
+## 适合这些场景
+
+<Columns cols={2}>
+  <Card title="搭建多渠道机器人" icon="message-circle">
+    接入 QQ、微信、千寻、飞书等适配器，把消息、通知、请求和支付事件交给插件处理。
+  </Card>
+  <Card title="把脚本变成插件" icon="code-2">
+    使用 JavaScript、Python 或 Go 编写脚本，通过 `rule`、`event`、`router` 和 `cron` 触发自动化流程。
+  </Card>
+  <Card title="管理插件运行环境" icon="terminal">
+    在控制台安装 Node.js、Python、Go 运行时，并按脚本需要管理 `npm`、`pip`、`go` 等依赖。
+  </Card>
+  <Card title="分发和安装插件" icon="store">
+    使用插件市场订阅作者、购买或安装插件，作者也可以配置市场资料、上架插件并管理授权。
+  </Card>
+  <Card title="处理付费流程" icon="wallet-cards">
+    配置微信、支付宝或易支付，脚本可等待付款、记录订单，并在成功后继续执行。
+  </Card>
+  <Card title="维护自托管实例" icon="activity">
+    查看 CPU / 内存曲线、硬件信息、实时日志、在线更新任务和重启状态。
+  </Card>
+</Columns>
+
+## 核心能力
+
+<Columns cols={2}>
+  <Card title="IM 适配器和多账号" icon="radio-receiver">
+    通过 Adapter Gateway 管理账号连接、默认账号、账号状态和收发路由。适配器只负责平台协议，autClaw 负责消息分发、脚本调度和发送回执。
+  </Card>
+  <Card title="本地插件编辑器" icon="file-code">
+    在“本地应用”中创建、保存、启停和调试插件。编辑器会读取顶部声明，生成菜单、参数、依赖、定时任务和市场信息。
+  </Card>
+  <Card title="插件 SDK" icon="puzzle" href="/cn/plugin-sdk/overview">
+    使用 `Sender` 读取消息上下文，回复文本、Markdown、图片、语音、视频、文件或混合消息，也可以等待用户输入、撤回消息和管理群。
+  </Card>
+  <Card title="数据桶和权限" icon="database">
+    使用 bucket 保存插件配置、用户进度和缓存；你可以在数据管理中搜索、编辑、重命名或删除数据，并限制插件访问敏感 bucket。
+  </Card>
+  <Card title="运行时依赖" icon="package">
+    通过 `mise` 管理多版本 Node.js、Python、Go；通过依赖管理安装、检查、重装、取消或卸载插件依赖。
+  </Card>
+  <Card title="实时日志和调试" icon="logs">
+    查看 HTTP、插件、适配器、依赖和系统事件日志。插件调试会保留会话、消息和运行记录，便于复现问题。
+  </Card>
+</Columns>
+
+## 插件可以做什么
+
+| 能力 | 你可以怎么用 |
+| --- | --- |
+| 消息触发 | 用 `rule` 匹配文本，按 `im_type`、用户或群筛选触发范围。 |
+| 事件触发 | 用 `event` 处理消息、通知、请求、元事件和支付事件。 |
+| HTTP 路由 | 用 `router` 和 `method` 把插件变成 HTTP 处理函数。 |
+| 定时任务 | 用 `cron` 定时执行同步、提醒、检测或推送任务。 |
+| 参数配置 | 用 `param` 声明表单项，支持必填、密钥、布尔值、选项和账号级配置。 |
+| 依赖安装 | 用 `dependency` 声明运行时依赖，减少手动进入容器安装包的操作。 |
+| 主动推送 | 使用 `push`、`pushImage`、`pushFile` 和 `pushMixed` 向指定渠道、群或用户发送内容。 |
+| 媒体处理 | 下载用户上传文件，发送图片、语音、视频、文件和 mixed 消息。 |
+
+<Tip>
+  新插件建议先看 [插件 SDK 概览](/cn/plugin-sdk/overview)，再按 [Manifest headers](/cn/plugin-sdk/manifest) 补齐触发规则、参数和依赖。
+</Tip>
+
+## 从部署到使用
+
+<Steps>
+  <Step title="部署服务">
+    用 Docker 启动 autClaw，并把数据目录持久化到 `/opt/autclaw` 或你的 NAS Docker 目录。
+  </Step>
+  <Step title="完成初始化">
+    打开控制台，注册管理员账号，按提示完成登录、授权状态检查和机器码绑定。
+  </Step>
+  <Step title="接入 IM 账号">
+    在“适配器管理”中启用平台适配器，配置账号参数、扫码或连接外部框架，并确认运行状态正常。
+  </Step>
+  <Step title="安装或编写插件">
+    从插件市场安装插件，或进入“本地应用”创建脚本。需要第三方包时，在运行时和依赖管理中安装。
+  </Step>
+  <Step title="观察和迭代">
+    在“系统总览”和“实时日志”中查看资源、错误和运行记录；修改插件后保存并重新触发测试。
+  </Step>
+</Steps>
+
+## 运维和扩展
+
+<Columns cols={2}>
+  <Card title="在线更新" icon="refresh-cw" href="/cn/getting-started/upgrade">
+    在控制台或 IM 渠道触发更新，保留用户插件、数据、运行时和依赖目录。
+  </Card>
+  <Card title="Docker 持久化" icon="hard-drive" href="/cn/getting-started/runtime-paths">
+    了解 `autMan.db`、`plugin/`、`dist/`、`envs/mise` 和 `envs/packages` 的默认位置。
+  </Card>
+  <Card title="图库图床" icon="images">
+    上传和管理图片资源，用于插件消息、支付二维码、说明图或临时素材。
+  </Card>
+  <Card title="Open API" icon="key-round">
+    创建应用和 Secret，为外部系统签发访问 Token，读取系统状态或用户资料。
+  </Card>
+  <Card title="关键词回复" icon="message-square-reply">
+    不写代码也能配置关键词规则，适合常见问答、快捷提示和基础自动回复。
+  </Card>
+  <Card title="容器对接" icon="boxes">
+    测试青龙、呆呆等容器服务连接，把外部自动化环境纳入 autClaw 工作流。
+  </Card>
+</Columns>
+
+## 下一步
+
+<Columns cols={2}>
+  <Card title="部署 autClaw" icon="rocket" href="/cn/getting-started/deploy" cta="开始部署">
+    准备 Docker 和持久化目录，启动后访问 `8200` 端口。
+  </Card>
+  <Card title="编写第一个插件" icon="puzzle" href="/cn/plugin-sdk/overview" cta="查看 SDK">
+    选择 JavaScript 或 Python，读取消息并回复内容。
+  </Card>
+</Columns>
