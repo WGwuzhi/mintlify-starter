@@ -1,0 +1,8 @@
+# Local Node artifacts
+node_modules/
+package.json
+package-lock.json
+
+# Local agent/skill artifacts
+.agents/
+skills-lock.json
