@@ -1,0 +1,152 @@
+---
+title: "Proactive push"
+description: "Use push and push* to proactively send text, media, and mixed messages, and control the sending account."
+icon: "send"
+---
+
+Proactive push does not depend on the reply target of `Sender`. You need to specify the target IM, group, or user. For group push, pass `groupCode`; for private push, pass `userID`.
+
+## Function overview
+
+| Function | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `push(imType, groupCode, userID, title, content, options?, timeout?)` | Push text. | `imType`: required; `groupCode`: group ID, pass `''` for private chat; `userID`: user ID, pass `''` for group push; `title`: title or fallback text; `content`: text; `options`: optional; `timeout`: optional milliseconds. | `Promise<number>`, number of successfully sent targets, usually `0` or `1`. |
+| `pushImage(imType, groupCode, userID, title, imageUrl)` | Push an image. | First four parameters are the same; `imageUrl`: required image source. | `Promise<number>` |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | Push voice/audio. | `voiceUrl`: required voice source. | `Promise<number>` |
+| `pushVideo(imType, groupCode, userID, title, videoUrl)` | Push a video. | `videoUrl`: required video source. | `Promise<number>` |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options?)` | Push a file. | `fileUrl`: required file source; `options` can pass filename and MIME type. The current helper does not forward `account_id` to the top level. | `Promise<number>` |
+| `pushMixed(imType, groupCode, userID, title, items)` | Push a mixed message. | `items`: required mixed items. | `Promise<number>` |
+
+## `push(imType, groupCode, userID, title, content, options?, timeout?)`
+
+<ParamField path="imType" type="string" required>
+  Target IM type, such as `qq`, `weixin`, or `qx`, depending on enabled adapters.
+</ParamField>
+
+<ParamField path="groupCode" type="string" required>
+  Group ID / group number. Required for group push; pass an empty string for private chat.
+</ParamField>
+
+<ParamField path="userID" type="string" required>
+  User ID. Required for private push; group push can pass an empty string.
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Push title or note. In text push, if `content` is empty, `title` is used as the text.
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Text content. The runtime also supports `text` / `message` fields, but the helper always sends `content`.
+</ParamField>
+
+<ParamField path="options" type="object">
+  Optional extension fields. `middleware.js` shallow-merges this object into the top-level request body.
+</ParamField>
+
+<ParamField path="options.account_id" type="string">
+  Target account ID. You can also write `accountID` or `accountId`. Explicit values have the highest priority.
+</ParamField>
+
+<ParamField path="timeout" type="number" default="5000">
+  Request timeout in milliseconds.
+</ParamField>
+
+```js
+const { push } = require('./middleware.js')
+
+const sent = await push('qq', '123456', '', 'Daily report', 'Tasks done today', {
+  account_id: 'bot_qq_ops',
+})
+
+if (sent === 0) {
+  console.log('Not sent: check the target, adapter status, or whether the account is online')
+}
+```
+
+## Push account selection
+
+Selection rules:
+
+1. For `push(...)`, if `options` contains `account_id`, use it.
+2. If this is a message trigger and the target IM is the same as the current chat IM, use the current chat account by default.
+3. If this is cron / fake, use the target IM default account.
+4. For cross-IM push, use the target IM default account.
+5. If the target IM has no default account, the runtime selects the first online account that can send. If there is no available sending account, it returns `0` or throws an adapter-offline error.
+
+<Tip>
+  When you know which sending account to use, pass `options.account_id` explicitly. This is more stable than depending on the current chat account or target IM default account.
+</Tip>
+
+```js
+// 1. Explicit account wins.
+await push('qq', '123456', '', 'Notice', 'Done', {
+  account_id: 'bot_qq_ops',
+})
+
+// 2. The message comes from qq:bot_qq_2 and target IM is also qq: bot_qq_2 is used by default.
+await push('qq', '123456', '', 'Notice', 'Done')
+
+// 3. cron / fake: use the qq default account.
+await push('qq', '123456', '', 'Scheduled notice', 'Good morning')
+
+// 4. Cross-IM: the current message comes from qq but pushes to weixin; use the weixin default account.
+await push('weixin', '', 'wxid_user', 'Notice', 'Done')
+```
+
+## Media push
+
+```js
+await pushImage('qq', '123456', '', 'Daily image', './daily.png')
+await pushVoice('qq', '123456', '', 'Voice reminder', './notice.wav')
+await pushVideo('qq', '123456', '', 'Demo video', './demo.mp4')
+await pushFile('qq', '123456', '', 'Daily file', './daily.csv', {
+  filename: 'daily.csv',
+  mimeType: 'text/csv',
+})
+await pushMixed('qq', '123456', '', 'Result', [
+  { type: 'text', text: 'Result:' },
+  { type: 'image', source: './result.png' },
+])
+```
+
+<Warning>
+  `pushImage(...)`, `pushVoice(...)`, `pushVideo(...)`, and `pushFile(...)` currently do not expose a top-level `account_id` parameter in the JS helper. `pushFile(...)` `options` are only used to construct `media` and do not become a top-level account field. `pushMixed(...)` helper does not declare an `options` parameter; do not assume it can explicitly choose an account like `push(...)`. If you need to force an account for media push, prefer sending a text notification with `push(...)` first. If you need lower-level capability, evaluate version compatibility before calling `accessService('/pushImage', ...)` with top-level `account_id` yourself.
+</Warning>
+
+## Return value
+
+Proactive push functions return a number: the count of targets that the runtime considers successfully sent.
+
+```json
+1
+```
+
+```json
+0
+```
+
+- `1`: usually means the message was submitted to one target.
+- `0`: usually means no available adapter, invalid target, or not sent.
+- Adapter request failures may throw `Error`.
+
+## Mixed items
+
+`pushMixed(...)` items are the same as [`replyMixed(...)`](/en/plugin-sdk/javascript/sender-messages): they support `text`, `markdown`, `image`, `voice`, `video`, and `file`.
+
+```js
+await pushMixed('qq', '123456', '', 'mixed demo', [
+  { type: 'text', text: 'See the image:' },
+  { type: 'image', source: 'https://example.com/a.png', name: 'a.png' },
+])
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Runtime context" icon="circle-dot" href="/en/plugin-sdk/javascript/context">
+    See differences between message, cron, route, and cross-IM contexts.
+  </Card>
+  <Card title="Media files" icon="file-down" href="/en/plugin-sdk/javascript/media-files">
+    See media sources, downloads, and user-uploaded file handling.
+  </Card>
+</CardGroup>

@@ -1,0 +1,246 @@
+---
+title: "Wait for input and payment"
+description: "Wait for user input, capture media, wait for payment events, and handle waitPay amount matching."
+icon: "hourglass"
+---
+
+`listen(...)`, `input(...)`, and `waitPay(...)` block the current plugin run until a matching event arrives, the wait times out, or the user sends the exit code. Payment plugins should handle timeout, cancellation, and amount mismatch explicitly.
+
+## `listen(waitTime, recallTime?, scope?)`
+
+Wait for the next user input in the same chat and account. Timeout returns an empty string `""`.
+
+<ParamField path="waitTime" type="number" required>
+  Wait time in milliseconds. The runtime normalizes it: default `60000` ms, minimum `1000` ms, and usually maximum `900000` ms.
+</ParamField>
+
+<ParamField path="recallTime" type="number | 'group'" default="0">
+  Milliseconds to delay before recalling the user's message after input is received. If the second parameter is directly `'group'`, the SDK treats it as `scope` and sets `recallTime` to `0`.
+</ParamField>
+
+<ParamField path="scope" type="'group' | string">
+  Pass `'group'` to allow any member in the same group to answer. If omitted, only the current user is waited for.
+</ParamField>
+
+```js
+await sender.reply('Send the verification code within 60 seconds')
+const code = await sender.listen(60000)
+
+if (!code) {
+  await sender.reply('Timed out. Please start again.')
+} else {
+  await sender.reply(`Received: ${code}`)
+}
+```
+
+## `input(waitTime, recallTime?, scope?)`
+
+`input(...)` is an alias of `listen(...)` with the same parameters and return value.
+
+```js
+await sender.reply('Any member in the group can reply y within 60 seconds to confirm')
+const answer = await sender.input(60000, 0, 'group')
+
+if (answer !== 'y') {
+  await sender.reply('Not confirmed.')
+}
+```
+
+If the waited message contains media, `input(...)` returns the text content. Read media from `sender.getMediaItems()`.
+
+```js
+const { downloadAdapterFile } = require('./middleware.js')
+
+await sender.reply('Please send a CSV file')
+const text = await sender.input(60000)
+const items = await sender.getMediaItems()
+const csv = items.find((item) => item.type === 'file')
+
+if (!csv) {
+  await sender.reply(`No file received. Text received: ${text || 'empty'}`)
+  return
+}
+
+const saved = await downloadAdapterFile(csv, { path: 'imports' })
+await sender.reply(`Saved: ${saved.file_name}, size: ${saved.file_size} bytes`)
+```
+
+## `waitPay(exitcode, timeout, amount?)`
+
+Wait for a payment event or exit code. It uses the IM, account, chat, and user from the current runtime context to register the payment wait. If payment configuration is unavailable, it falls back to legacy payment-event waiting.
+
+<ParamField path="exitcode" type="string" required>
+  Exit code. During the wait, if the user sends exactly the same text, the method returns that string and ends the wait. Pass an empty string to disable the user exit code.
+</ParamField>
+
+<ParamField path="timeout" type="number" required>
+  Wait time in milliseconds. The runtime normalizes it by the input wait limit, usually up to `900000` ms.
+</ParamField>
+
+<ParamField path="amount" type="string | number">
+  Expected payment amount. The SDK sends it to the runtime as `expected_amount`. `undefined`, `null`, or an empty string does not send this field.
+</ParamField>
+
+### What `amount` changes
+
+After you pass a valid `amount`, the runtime:
+
+1. Writes the amount to payment wait metadata `ExpectedAmount`.
+2. Writes the amount to payment record `expected_amount` when payment storage is enabled.
+3. Adds `expected_amount` and `amount_matched` to the success object.
+4. Sets the transfer link amount to the expected amount for forced Alipay transfer link scenarios. If no amount is passed, the default is `0.01`.
+
+<Warning>
+  `amount` is not a universal hard filter for all payment channels. Different channels may still deliver payment events to the wait flow. Before delivery, access grant, or card issuing, check `amount_matched === true` in the returned object.
+</Warning>
+
+### What `amount` does not change
+
+- Timeout still returns the string `"timeout"`.
+- Concurrency conflicts still return the string `"busy"`.
+- If the user sends `exitcode`, the method still returns that exit code string.
+- Without a successful payment object, it will not invent `expected_amount` or `amount_matched`.
+
+### Return values
+
+<Tabs sync={false}>
+  <Tab title="Timeout">
+    ```json
+    "timeout"
+    ```
+
+    Returned when the wait time is exhausted. Tell the user to start the flow again.
+  </Tab>
+  <Tab title="Busy">
+    ```json
+    "busy"
+    ```
+
+    Returned when the current payment channel or chat already has a conflicting wait flow. Ask the user to try again later.
+  </Tab>
+  <Tab title="Exit code">
+    ```json
+    "q"
+    ```
+
+    Returned when the user sends `exitcode`. The return value is the exit code you passed in.
+  </Tab>
+  <Tab title="Payment success">
+    ```json
+    {
+      "event_type": "payment",
+      "event_category": "payment",
+      "payment_channel": "epay",
+      "payment_type": "payment",
+      "order_id": "pay_8f1c2a3b4d5e6f70",
+      "trade_no": "202605280001",
+      "money": 19.8,
+      "Money": 19.8,
+      "received_amount": 19.8,
+      "expected_amount": 19.8,
+      "amount_matched": true,
+      "time": "2026-05-28T12:00:00Z"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<ResponseField name="money" type="number | string">
+  Received payment amount. The runtime also fills compatible `Money`. If an event only has `received_amount`, it uses that to fill `money` / `Money`.
+</ResponseField>
+
+<ResponseField name="Money" type="number | string">
+  Uppercase amount field kept for legacy plugins. It is usually the same as `money`.
+</ResponseField>
+
+<ResponseField name="received_amount" type="number | string">
+  Actual received amount in the payment event. Not all channels return this field.
+</ResponseField>
+
+<ResponseField name="expected_amount" type="number">
+  Returned only when the normalized `amount` is greater than `0`. It is the expected amount for this wait.
+</ResponseField>
+
+<ResponseField name="amount_matched" type="boolean">
+  Whether the received amount matches the expected amount. The runtime compares `money` and `expected_amount`; a difference smaller than `0.001` is treated as matched. If either amount is missing or less than or equal to `0`, this is `false`.
+</ResponseField>
+
+<ResponseField name="order_id" type="string">
+  Order number generated by the payment wait flow or returned by the channel. When payment configuration is enabled, it usually looks like `pay_<hex>`.
+</ResponseField>
+
+<ResponseField name="trade_no" type="string">
+  Payment channel transaction number. Its presence depends on the channel event.
+</ResponseField>
+
+### Safe handling template
+
+```js
+const result = await sender.waitPay('q', 120000, 19.8)
+
+if (result === 'timeout') {
+  await sender.reply('Payment timed out. Please start again.')
+  return
+}
+
+if (result === 'busy') {
+  await sender.reply('A payment wait is already active. Try again later.')
+  return
+}
+
+if (result === 'q') {
+  await sender.reply('Payment canceled.')
+  return
+}
+
+if (!result || typeof result !== 'object') {
+  await sender.reply('No valid payment result was received.')
+  return
+}
+
+if (result.expected_amount && result.amount_matched !== true) {
+  await sender.reply(`Amount mismatch. Expected ${result.expected_amount}, received ${result.money || result.received_amount || 'unknown'}.`)
+  return
+}
+
+await sender.reply('Payment succeeded. Delivering now.')
+```
+
+### FAQ
+
+<AccordionGroup>
+  <Accordion title="Will the return body always change after I pass amount?">
+    You only see `expected_amount` and `amount_matched` after a successful payment returns an object. If the method returns `"timeout"`, `"busy"`, or the exit code string, the return body is unchanged.
+  </Accordion>
+  <Accordion title="Can amount be a string?">
+    Yes. The runtime normalizes numbers, numeric strings, amounts prefixed with `¥` / `￥`, and comma-separated amounts into numbers. The JS helper sends `expected_amount` whenever `amount` is not `undefined`, `null`, or an empty string. If the runtime cannot parse it or the parsed value is less than or equal to `0`, it will not add a valid `expected_amount` to the success object.
+  </Accordion>
+  <Accordion title="Does amount automatically reject mismatched payments?">
+    Do not assume that. It records the expected amount and returns `amount_matched` on success. Some channels or order flows may use the expected amount to help match payment events, but your plugin should still check `amount_matched` before delivery.
+  </Accordion>
+</AccordionGroup>
+
+## `atWaitPay()`
+
+Check whether the current runtime has a payment wait flow.
+
+| Method | Parameters | Returns |
+|---|---|---|
+| `atWaitPay()` | None | `Promise<boolean>` |
+
+```js
+if (await sender.atWaitPay()) {
+  await sender.reply('A payment wait is already active. Please wait.')
+}
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Events and media items" icon="file-down" href="/en/plugin-sdk/javascript/media-files">
+    Learn how to read user-uploaded files after waiting for input.
+  </Card>
+  <Card title="Payment plugin permissions and config" icon="file-code" href="/en/plugin-sdk/manifest">
+    See manifest headers and parameter declarations.
+  </Card>
+</CardGroup>

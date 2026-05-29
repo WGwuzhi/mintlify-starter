@@ -77,3 +77,32 @@ After startup, open:
 ```text
 http://SYNOLOGY_IP:8200
 ```
+
+
+<Note>
+  To change the port, for example mapping host port `18200` to container port `8200`, change `-p 8200:8200` to `-p 18200:8200`.
+</Note>
+
+## View logs
+
+```bash
+docker logs -f autclaw
+```
+
+## Recreate the container
+
+```bash
+docker rm -f autclaw
+
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:latest
+```
+
+<Warning>
+  Do not delete `/opt/autclaw`, `/vol1/1000/docker/autclaw`, or `/volume1/docker/autclaw` unless you explicitly want to clear data, plugins, and runtime dependencies.
+</Warning>

@@ -8,6 +8,9 @@
     "dark": "#1D4ED8"
   },
   "favicon": "/favicon.svg",
+  "icons": {
+    "library": "lucide"
+  },
   "navigation": {
     "languages": [
       {
@@ -38,14 +41,16 @@
                   "cn/getting-started/deploy",
                   "cn/getting-started/upgrade",
                   "cn/getting-started/runtime-paths"
-                ]
+                ],
+                "icon": "rocket"
               },
               {
                 "group": "运维",
                 "pages": [
                   "cn/operations/docker",
                   "cn/operations/chromium-cjk"
-                ]
+                ],
+                "icon": "settings"
               }
             ]
           },
@@ -54,15 +59,30 @@
             "icon": "puzzle",
             "groups": [
               {
-                "group": "Plugin SDK",
+                "group": "插件 SDK",
                 "pages": [
                   "cn/plugin-sdk/overview",
                   "cn/plugin-sdk/manifest",
-                  "cn/plugin-sdk/javascript",
+                  {
+                    "group": "JavaScript 中间件",
+                    "root": "cn/plugin-sdk/javascript",
+                    "directory": "card",
+                    "expanded": true,
+                    "pages": [
+                      "cn/plugin-sdk/javascript/context",
+                      "cn/plugin-sdk/javascript/sender-messages",
+                      "cn/plugin-sdk/javascript/wait-and-payment",
+                      "cn/plugin-sdk/javascript/media-files",
+                      "cn/plugin-sdk/javascript/storage-and-routes",
+                      "cn/plugin-sdk/javascript/push",
+                      "cn/plugin-sdk/javascript/tools-cron-group"
+                    ],
+                    "icon": "braces"
+                  },
                   "cn/plugin-sdk/python",
-                  "cn/plugin-sdk/media",
-                  "cn/plugin-sdk/ai"
-                ]
+                  "cn/plugin-sdk/media"
+                ],
+                "icon": "puzzle"
               }
             ]
           }
@@ -95,14 +115,16 @@
                   "en/getting-started/deploy",
                   "en/getting-started/upgrade",
                   "en/getting-started/runtime-paths"
-                ]
+                ],
+                "icon": "rocket"
               },
               {
                 "group": "Operations",
                 "pages": [
                   "en/operations/docker",
                   "en/operations/chromium-cjk"
-                ]
+                ],
+                "icon": "settings"
               }
             ]
           },
@@ -115,11 +137,26 @@
                 "pages": [
                   "en/plugin-sdk/overview",
                   "en/plugin-sdk/manifest",
-                  "en/plugin-sdk/javascript",
+                  {
+                    "group": "JavaScript middleware",
+                    "root": "en/plugin-sdk/javascript",
+                    "directory": "card",
+                    "expanded": true,
+                    "pages": [
+                      "en/plugin-sdk/javascript/context",
+                      "en/plugin-sdk/javascript/sender-messages",
+                      "en/plugin-sdk/javascript/wait-and-payment",
+                      "en/plugin-sdk/javascript/media-files",
+                      "en/plugin-sdk/javascript/storage-and-routes",
+                      "en/plugin-sdk/javascript/push",
+                      "en/plugin-sdk/javascript/tools-cron-group"
+                    ],
+                    "icon": "braces"
+                  },
                   "en/plugin-sdk/python",
-                  "en/plugin-sdk/media",
-                  "en/plugin-sdk/ai"
-                ]
+                  "en/plugin-sdk/media"
+                ],
+                "icon": "puzzle"
               }
             ]
           }

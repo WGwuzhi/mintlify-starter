@@ -1,0 +1,152 @@
+---
+title: "主动推送"
+description: "使用 push 和 push* 主动发送文本、媒体和 mixed 消息，并控制发送账号。"
+icon: "send"
+---
+
+主动推送不依赖 `Sender` 的回复目标。你需要指定目标 IM、群或用户。群推送传 `groupCode`；私聊推送传 `userID`。
+
+## 函数总览
+
+| 函数 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `push(imType, groupCode, userID, title, content, options?, timeout?)` | 推送文本。 | `imType`：必填；`groupCode`：群 ID，私聊传 `''`；`userID`：用户 ID，群推送传 `''`；`title`：标题或备用文本；`content`：文本；`options`：可选；`timeout`：可选毫秒。 | `Promise<number>`，成功发送的目标数，通常是 `0` 或 `1`。 |
+| `pushImage(imType, groupCode, userID, title, imageUrl)` | 推送图片。 | 前四项同上；`imageUrl`：必填图片来源。 | `Promise<number>` |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | 推送语音。 | `voiceUrl`：必填语音来源。 | `Promise<number>` |
+| `pushVideo(imType, groupCode, userID, title, videoUrl)` | 推送视频。 | `videoUrl`：必填视频来源。 | `Promise<number>` |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options?)` | 推送文件。 | `fileUrl`：必填文件来源；`options` 可传文件名和 MIME 类型。当前 helper 不会把 `account_id` 透传到顶层。 | `Promise<number>` |
+| `pushMixed(imType, groupCode, userID, title, items)` | 推送混合消息。 | `items`：必填 mixed items。 | `Promise<number>` |
+
+## `push(imType, groupCode, userID, title, content, options?, timeout?)`
+
+<ParamField path="imType" type="string" required>
+  目标 IM 类型，例如 `qq`、`weixin`、`qx`，以已启用适配器为准。
+</ParamField>
+
+<ParamField path="groupCode" type="string" required>
+  群 ID / 群号。群推送必填；私聊传空字符串。
+</ParamField>
+
+<ParamField path="userID" type="string" required>
+  用户 ID。私聊推送必填；群推送可传空字符串。
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  推送标题或备注。文本推送中如果 `content` 为空，会用 `title` 作为文本。
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  文本内容。运行时也兼容 `text` / `message` 字段，但 helper 固定传 `content`。
+</ParamField>
+
+<ParamField path="options" type="object">
+  可选扩展字段。`middleware.js` 会把该对象浅合并到顶层请求体。
+</ParamField>
+
+<ParamField path="options.account_id" type="string">
+  目标账号 ID。也可写作 `accountID` 或 `accountId`。显式传入时优先级最高。
+</ParamField>
+
+<ParamField path="timeout" type="number" default="5000">
+  请求超时时间，单位毫秒。
+</ParamField>
+
+```js
+const { push } = require('./middleware.js')
+
+const sent = await push('qq', '123456', '', '日报', '今日任务完成', {
+  account_id: 'bot_qq_ops',
+})
+
+if (sent === 0) {
+  console.log('未发送：请检查目标、适配器状态或账号是否在线')
+}
+```
+
+## 推送账号选择
+
+选择规则：
+
+1. 对 `push(...)`，如果 `options` 中有 `account_id`，使用它。
+2. 如果是消息触发，并且目标 IM 与当前会话 IM 一致，默认使用当前会话账号。
+3. 如果是 cron / fake，使用目标 IM 的默认账号。
+4. 如果跨 IM 推送，使用目标 IM 的默认账号。
+5. 如果目标 IM 没有默认账号，运行时会选择第一个在线可发送账号；没有可发送账号时返回 `0` 或抛出适配器离线错误。
+
+<Tip>
+  能确定发送账号时，优先显式传 `options.account_id`。这比依赖“当前会话账号”或“目标 IM 默认账号”更稳定。
+</Tip>
+
+```js
+// 1. 显式账号优先。
+await push('qq', '123456', '', '通知', '处理完成', {
+  account_id: 'bot_qq_ops',
+})
+
+// 2. 消息来自 qq:bot_qq_2，目标 IM 也是 qq：默认使用 bot_qq_2。
+await push('qq', '123456', '', '通知', '处理完成')
+
+// 3. cron / fake：使用 qq 默认账号。
+await push('qq', '123456', '', '定时通知', '早上好')
+
+// 4. 跨 IM：当前消息来自 qq，但推送到 weixin；使用 weixin 默认账号。
+await push('weixin', '', 'wxid_user', '通知', '处理完成')
+```
+
+## 媒体推送
+
+```js
+await pushImage('qq', '123456', '', '日报图片', './daily.png')
+await pushVoice('qq', '123456', '', '语音提醒', './notice.wav')
+await pushVideo('qq', '123456', '', '演示视频', './demo.mp4')
+await pushFile('qq', '123456', '', '日报文件', './daily.csv', {
+  filename: 'daily.csv',
+  mimeType: 'text/csv',
+})
+await pushMixed('qq', '123456', '', '处理结果', [
+  { type: 'text', text: '结果如下：' },
+  { type: 'image', source: './result.png' },
+])
+```
+
+<Warning>
+  `pushImage(...)`、`pushVoice(...)`、`pushVideo(...)` 和 `pushFile(...)` 当前 JS helper 不暴露顶层 `account_id` 参数。`pushFile(...)` 的 `options` 只用于构造 `media`，不会成为顶层账号字段。`pushMixed(...)` 的 helper 不声明 `options` 参数；不要假设它能像 `push(...)` 一样显式选择账号。需要强制账号推送媒体时，优先先用 `push(...)` 发送文本通知；确需底层能力时，再评估用 `accessService('/pushImage', ...)` 自行传顶层 `account_id` 的版本兼容性。
+</Warning>
+
+## 返回值
+
+主动推送函数返回数字，表示运行时认为发送成功的目标数。
+
+```json
+1
+```
+
+```json
+0
+```
+
+- `1`：通常表示已提交给一个目标。
+- `0`：通常表示没有可用适配器、目标无效或未发送。
+- 适配器请求失败时可能抛出 `Error`。
+
+## mixed items
+
+`pushMixed(...)` 的 `items` 与 [`replyMixed(...)`](/cn/plugin-sdk/javascript/sender-messages) 相同：支持 `text`、`markdown`、`image`、`voice`、`video`、`file`。
+
+```js
+await pushMixed('qq', '123456', '', 'mixed demo', [
+  { type: 'text', text: '请查看图片：' },
+  { type: 'image', source: 'https://example.com/a.png', name: 'a.png' },
+])
+```
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="运行上下文" icon="circle-dot" href="/cn/plugin-sdk/javascript/context">
+    查看消息、cron、路由和跨 IM 的上下文差异。
+  </Card>
+  <Card title="媒体文件" icon="file-down" href="/cn/plugin-sdk/javascript/media-files">
+    查看媒体来源、下载和用户上传文件处理。
+  </Card>
+</CardGroup>

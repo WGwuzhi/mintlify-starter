@@ -1,5 +1,5 @@
 ---
-title: "Plugin SDK overview"
+title: "插件 SDK 概览"
 description: "用 JavaScript 或 Python 编写 autClaw 普通插件。"
 icon: "puzzle"
 ---
@@ -91,7 +91,7 @@ autClaw 插件可以读取消息、回复文本或媒体、保存配置、等待
   <Card title="Manifest headers" icon="file-code" href="/cn/plugin-sdk/manifest">
     声明插件名称、作者、触发规则、参数、依赖、路由和定时任务。
   </Card>
-  <Card title="JavaScript middleware" icon="square-js" href="/cn/plugin-sdk/javascript">
+  <Card title="JavaScript middleware" icon="braces" href="/cn/plugin-sdk/javascript">
     查看 `Sender`、存储、文件、路由、等待输入和 cron 的 JavaScript 用法。
   </Card>
   <Card title="Python middleware" icon="code" href="/cn/plugin-sdk/python">
@@ -131,7 +131,7 @@ autClaw 插件可以读取消息、回复文本或媒体、保存配置、等待
 - 使用 `Sender` 读取上下文和回复消息。
 - 媒体发送使用 `replyImage`、`replyVoice`、`replyVideo`、`replyFile` 或 `replyMixed`。
 - 用户上传文件使用 `sender.getMediaItems()` + `downloadAdapterFile(...)`。
-- 配置项写在 `param` 里，运行状态写入 `bucketSet(...)`。
+- 配置项写在 `param` 里，运行状态写入 `bucketSet(...)`；bucket 名称可用 `.` 表示子级，推荐最多 3 级。
 - 依赖优先写在 `dependency` 里；临时依赖可用 `importModule(...)` 或 `import_module(...)`。
 
 ## 避免这些做法

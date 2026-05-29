@@ -1,0 +1,204 @@
+---
+title: "Context and types"
+description: "Understand the Sender runtime context, account selection basics, and common return bodies."
+icon: "circle-dot"
+---
+
+This page explains the base runtime model and common return bodies for `middleware.js`. Before you write business logic, first confirm whether your plugin runs in a message, HTTP route, or cron / fake context.
+
+## Runtime context
+
+Each plugin run has a `senderID`. For message triggers, `senderID` contains the IM, account, chat, and user. Cron triggers use a `fake` runtime context. Route triggers use a route context.
+
+| Scenario | `getImtype()` | Reply target | Proactive push account selection |
+|---|---|---|---|
+| Message trigger | Current message IM, such as `qq` or `weixin` | Current chat and current receiving account | If the target IM equals the current IM, the current chat account is used by default. |
+| cron / fake | `fake` | `reply*` does not send real IM messages by default | Uses the target IM default account. |
+| HTTP route | Route context | `reply(...)` / `replyMarkdown(...)` writes route response data | Uses the target IM default account unless you pass `account_id` explicitly. |
+| Cross-IM push | Current context IM differs from target IM | Not applicable | Uses the target IM default account. |
+
+<Tip>
+  `push(...)` can explicitly choose a sending account with `options.account_id`. An explicit `account_id` has priority over the current chat account and the target IM default account. For multi-account plugins, explicitly set it for text proactive pushes.
+</Tip>
+
+```js
+const { Sender, getSenderID, push } = require('./middleware.js')
+const sender = new Sender(getSenderID())
+
+// The message comes from qq:bot_qq_2 and the target IM is also qq: bot_qq_2 is used by default.
+await push('qq', '123456', '', 'Notice', 'Done')
+
+// Explicit account_id wins: this uses bot_qq_ops.
+await push('qq', '123456', '', 'Notice', 'Done', {
+  account_id: 'bot_qq_ops',
+})
+
+// Cross-IM push: the message comes from qq but is pushed to weixin; the weixin default account is used.
+await push('weixin', '', 'wxid_user', 'Notice', 'Done')
+```
+
+## Runtime response wrapper
+
+Plugin calls receive the `data` field. You do not need to handle the HTTP wrapper. The underlying runtime response shape is:
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "ok": true
+  },
+  "request_id": "req_abc123"
+}
+```
+
+If a request fails, `middleware.js` converts the runtime error to an `Error` and throws it.
+
+## `SendReceipt`
+
+Text, media, mixed-message, and recall methods usually return a send receipt.
+
+```json
+{
+  "ok": true,
+  "message_id": "msg_123456",
+  "messageid": "msg_123456",
+  "message_ids": ["msg_123456"],
+  "raw": {
+    "adapter": "qq"
+  },
+  "action": "sendText"
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  Whether sending succeeded. If the adapter does not return it explicitly, the runtime fills it with `true`.
+</ResponseField>
+
+<ResponseField name="message_id" type="string">
+  Standard message ID. Pass it to `recallMessage(...)` when recalling a message.
+</ResponseField>
+
+<ResponseField name="messageid" type="string">
+  Message ID field kept for legacy plugins. It is usually the same as `message_id`.
+</ResponseField>
+
+<ResponseField name="message_ids" type="string[]">
+  Used for multi-part messages or when an adapter returns multiple IDs. A single message usually contains one ID.
+</ResponseField>
+
+<ResponseField name="raw" type="unknown">
+  Adapter raw receipt. Read it only when troubleshooting platform issues.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Failure reason that an adapter may return. On failure, check `receipt.ok === false` and `receipt.error` first.
+</ResponseField>
+
+## `FileDownloadResult`
+
+`fileDownload(...)` returns `FileDownloadResult`. `downloadAdapterFile(...)` returns the same fields and also includes `ok`, `url`, and `action`.
+
+```json
+{
+  "ok": true,
+  "action": "resolveFileURL",
+  "url": "https://adapter.example/files/card_keys.csv",
+  "path": "/opt/autclaw/file/imports/card_keys.csv",
+  "file_path": "/opt/autclaw/file/imports/card_keys.csv",
+  "file_name": "card_keys.csv",
+  "mime_type": "text/csv",
+  "file_size": 12345
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  Always returned by `downloadAdapterFile(...)`. It means the file was saved.
+</ResponseField>
+
+<ResponseField name="action" type="string">
+  When the SDK needs an adapter to resolve a platform file ID into a download URL first, this is usually `resolveFileURL`. It may be empty for direct URL downloads.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Actual download URL. It may be the original URL or a temporary URL resolved by the adapter.
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  Saved local path. Prefer passing this field to media methods such as `replyImage(...)` and `replyFile(...)`.
+</ResponseField>
+
+<ResponseField name="file_path" type="string">
+  Same as `path`. Kept as a more explicit field name.
+</ResponseField>
+
+<ResponseField name="file_name" type="string">
+  Saved filename.
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  Detected or provided MIME type, such as `image/png` or `text/csv`.
+</ResponseField>
+
+<ResponseField name="file_size" type="number">
+  File size in bytes.
+</ResponseField>
+
+## `MediaItem`
+
+`sender.getMediaItems()` returns normalized media items. It first returns media captured by the latest `listen(...)` / `input(...)`; otherwise it returns `media_items` / `mediaItems` from the current event.
+
+```json
+[
+  {
+    "type": "file",
+    "source": "file_123",
+    "name": "card_keys.csv",
+    "mime_type": "text/csv",
+    "platform_payload": {
+      "file_id": "file_123"
+    }
+  },
+  {
+    "type": "image",
+    "source": "https://example.com/demo.png",
+    "name": "demo.png",
+    "mime_type": "image/png"
+  }
+]
+```
+
+<ResponseField name="type" type="'image' | 'voice' | 'video' | 'file' | string" required>
+  Media type. The current normalization flow mainly keeps media items that have both `type` and `source`.
+</ResponseField>
+
+<ResponseField name="source" type="string" required>
+  Media source. It may be a URL, local path, temporary resource ID, platform file ID, or adapter raw file identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Filename or display name. The runtime normalizes `name`, `filename`, and `file_name` to `name`.
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  MIME type. The runtime normalizes it from `mime_type` or `mimeType`.
+</ResponseField>
+
+<ResponseField name="platform_payload" type="object">
+  Platform raw file information, such as `file_id`, `path`, or `url`. When downloading user-uploaded files, pass the whole `MediaItem` to `downloadAdapterFile(...)`.
+</ResponseField>
+
+<Warning>
+  Do not assemble platform file download URLs yourself. Pass the `MediaItem` through to `downloadAdapterFile(...)` and let the adapter handle platform differences and temporary URLs.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Read and reply to messages" icon="message-circle" href="/en/plugin-sdk/javascript/sender-messages">
+    See `Sender` message context, reply, and recall methods.
+  </Card>
+  <Card title="Proactive push account rules" icon="send" href="/en/plugin-sdk/javascript/push">
+    See `push(...)` `account_id` priority and cross-IM behavior.
+  </Card>
+</CardGroup>

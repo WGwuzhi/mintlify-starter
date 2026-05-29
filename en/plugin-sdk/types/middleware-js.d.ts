@@ -147,11 +147,19 @@ declare namespace AutClawMiddleware {
   }
 
   export interface WaitPaymentSuccess {
+    event_type?: string
+    event_category?: string
+    payment_channel?: string
+    payment_type?: string
     money?: string | number
     Money?: string | number
+    received_amount?: string | number
+    expected_amount?: number
+    amount_matched?: boolean
     order_id?: string
     orderID?: string
     trade_no?: string
+    time?: string
     [key: string]: unknown
   }
 
@@ -276,7 +284,7 @@ declare const middleware: {
   render(template: string, selector: string, data: unknown): Promise<unknown>
   getActiveImtypes(): Promise<string[]>
 
-  push(imType: string, groupCode: string, userID: string, title: string, content: string): void
+  push(imType: string, groupCode: string, userID: string, title: string, content: string, options?: Record<string, unknown>, timeout?: number): Promise<number>
   pushImage(imType: string, groupCode: string, userID: string, title: string, imageUrl: string): Promise<unknown>
   pushVideo(imType: string, groupCode: string, userID: string, title: string, videoUrl: string): Promise<unknown>
   pushVoice(imType: string, groupCode: string, userID: string, title: string, voiceUrl: string): Promise<unknown>

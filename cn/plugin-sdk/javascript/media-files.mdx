@@ -1,0 +1,316 @@
+---
+title: "事件、媒体和文件"
+description: "读取事件数据、获取媒体项、下载用户上传文件和获取群成员列表。"
+icon: "file-down"
+---
+
+本页覆盖事件字段、`sender.getMediaItems()`、文件下载和群成员列表。处理用户上传文件时，优先用标准化 `MediaItem`，不要手动拼平台下载地址。
+
+## 事件方法
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `getPluginName()` | 获取当前插件标题；无标题时返回插件名。 | 无 | `Promise<string>` |
+| `getPluginVersion()` | 获取当前插件版本。 | 无 | `Promise<string>` |
+| `getEventType()` | 获取当前事件类型。 | 无 | `Promise<string>` |
+| `setEventType(eventType)` | 设置当前运行上下文的事件类型。 | `eventType`：必填。 | `Promise<boolean>` |
+| `getEventData()` | 获取当前事件数据。不存在时返回 `{}`。 | 无 | `Promise<any>` |
+| `setEventData(eventData)` | 设置当前事件数据。 | `eventData`：必填，任意 JSON-like 数据。 | `Promise<boolean>` |
+| `getMediaItems()` | 获取当前事件或最近一次等待输入捕获到的媒体项。 | 无 | `Promise<MediaItem[]>` |
+
+## `getMediaItems()`
+
+`getMediaItems()` 查找顺序：
+
+1. `last_input_media_items`：最近一次 `listen(...)` / `input(...)` 捕获到的媒体。
+2. `media_items` / `mediaItems`：当前运行上下文中的媒体数组。
+3. `event_data.media_items` / `event_data.mediaItems`：当前事件数据中的媒体数组。
+4. 都不存在时返回 `[]`。
+
+返回数组中的每个对象会标准化为：
+
+<ResponseField name="type" type="string" required>
+  媒体类型，例如 `image`、`voice`、`video`、`file`。只有同时具备 `type` 和 `source` 的媒体项会保留。
+</ResponseField>
+
+<ResponseField name="source" type="string" required>
+  媒体来源。可能是 URL、本地路径、平台文件 ID、临时资源 ID 或适配器文件标识。
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  文件名。运行时会从 `name`、`filename`、`file_name` 中选择。
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  MIME 类型。运行时会从 `mime_type` 或 `mimeType` 中选择。
+</ResponseField>
+
+<ResponseField name="platform_payload" type="object">
+  适配器原始文件信息。下载用户上传文件时，保留它能提高适配器解析成功率。
+</ResponseField>
+
+```json
+[
+  {
+    "type": "file",
+    "source": "file_123",
+    "name": "card_keys.csv",
+    "mime_type": "text/csv",
+    "platform_payload": {
+      "file_id": "file_123",
+      "group_id": "123456"
+    }
+  }
+]
+```
+
+```js
+const items = await sender.getMediaItems()
+const image = items.find((item) => item.type === 'image')
+const file = items.find((item) => item.type === 'file')
+
+if (image) {
+  await sender.replyImage(image.source, { filename: image.name, mimeType: image.mime_type })
+}
+
+if (file) {
+  const saved = await downloadAdapterFile(file, { path: 'uploads' })
+  await sender.reply(`文件已保存到 ${saved.path}`)
+}
+```
+
+<Warning>
+  不要丢弃 `platform_payload` 后再下载。某些适配器需要它来把平台文件 ID 解析成临时下载 URL。
+</Warning>
+
+## `fileDownload(url, path?)`
+
+把远程 URL、`file://`、`base64://...` 或 `data:*;base64,...` 保存到本地。
+
+<ParamField path="url" type="string" required>
+  文件来源。支持 `http://`、`https://`、`file://`、`base64://...` 和 data URI。
+</ParamField>
+
+<ParamField path="path" type="string">
+  保存目录。不传时保存到运行下载根目录；相对路径会放到下载根目录下；绝对路径按原路径保存。相对路径不能跳出下载根目录。
+</ParamField>
+
+```js
+const file = await fileDownload('https://example.com/report.csv', 'reports')
+await sender.replyFile(file.path, { filename: file.file_name, mimeType: file.mime_type })
+```
+
+返回：
+
+```json
+{
+  "path": "/opt/autclaw/file/reports/report.csv",
+  "file_path": "/opt/autclaw/file/reports/report.csv",
+  "file_name": "report.csv",
+  "mime_type": "text/csv",
+  "file_size": 12345
+}
+```
+
+## `downloadAdapterFile(file, options?, timeout?)`
+
+下载用户上传到 IM 平台的文件。优先把 `sender.getMediaItems()` 返回的整个 `MediaItem` 传进去。
+
+<ParamField path="file" type="MediaItem | object | string" required>
+  用户上传文件项。对象可包含 `source`、`url`、`file_id`、`id`、`file`、`path` 或 `platform_payload`。传字符串时会当作文件来源；只有普通 URL 时也可以直接使用 `fileDownload(url)`。
+</ParamField>
+
+<ParamField path="options.path" type="string">
+  保存目录。规则同 `fileDownload(..., path)`。
+</ParamField>
+
+<ParamField path="options.fileName" type="string">
+  指定保存文件名。也可写作 `file_name`、`filename` 或 `name`。
+</ParamField>
+
+<ParamField path="options.mimeType" type="string">
+  指定 MIME 类型。也可写作 `mime_type`。
+</ParamField>
+
+<ParamField path="options.imType" type="string">
+  可选 IM 类型。也可写作 `imtype` 或 `im_type`。不传时使用当前运行上下文。
+</ParamField>
+
+<ParamField path="options.account_id" type="string">
+  可选账号 ID。也可写作 `accountID` 或 `accountId`。不传时使用当前运行上下文账号。
+</ParamField>
+
+<ParamField path="timeout" type="number" default="30000">
+  请求超时时间，单位毫秒。也可以把第二个参数直接传成数字，例如 `downloadAdapterFile(file, 60000)`。
+</ParamField>
+
+### 下载流程
+
+1. 如果 `source` 已经是 `http://`、`https://`、`data:`、`base64://` 或 `file://`，运行时直接下载。
+2. 如果 `source` 是平台文件 ID 或其他不可直接下载标识，运行时调用适配器的 `resolveFileURL`。
+3. 下载成功后保存到运行文件目录，返回本地路径。
+
+```js
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+
+if (fileItem) {
+  const saved = await downloadAdapterFile(fileItem, {
+    path: 'imports',
+    fileName: fileItem.name || 'upload.bin',
+    mimeType: fileItem.mime_type,
+  })
+  await sender.reply(`已保存：${saved.file_name}`)
+}
+```
+
+返回：
+
+```json
+{
+  "ok": true,
+  "action": "resolveFileURL",
+  "url": "https://adapter.example/temp/file.csv",
+  "path": "/opt/autclaw/file/imports/file.csv",
+  "file_path": "/opt/autclaw/file/imports/file.csv",
+  "file_name": "file.csv",
+  "mime_type": "text/csv",
+  "file_size": 2048
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  `downloadAdapterFile(...)` 成功时为 `true`。
+</ResponseField>
+
+<ResponseField name="action" type="string">
+  如果先调用了适配器解析下载 URL，通常为 `resolveFileURL`；直接下载时可能为空。
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  实际下载地址或解析后的临时 URL。
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  保存后的本地路径。
+</ResponseField>
+
+<ResponseField name="file_path" type="string">
+  与 `path` 相同。
+</ResponseField>
+
+<ResponseField name="file_name" type="string">
+  保存后的文件名。
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  MIME 类型。
+</ResponseField>
+
+<ResponseField name="file_size" type="number">
+  文件大小，单位字节。
+</ResponseField>
+
+## `getGroupMemberList(groupIDOrOptions?, options?, timeout?)`
+
+获取群成员列表。适配器必须支持 `getGroupMemberList`。
+
+```js
+const result = await getGroupMemberList('123456', {
+  imType: 'qq',
+  account_id: 'bot_qq_ops',
+  noCache: true,
+})
+
+for (const member of result.members) {
+  console.log(member.user_id, member.display_name)
+}
+```
+
+<ParamField path="groupIDOrOptions" type="string | object">
+  传字符串时表示群 ID。传对象时可包含 `group_id`、`groupID`、`groupCode`、`group`、`chat_id`、`imType`、`account_id` 等字段。不传群 ID 时会尝试使用当前群聊上下文。
+</ParamField>
+
+<ParamField path="options.imType" type="string">
+  目标 IM 类型。也可写作 `im_type`。不传时使用当前上下文 IM；cron / fake 上下文必须传。
+</ParamField>
+
+<ParamField path="options.account_id" type="string">
+  目标账号 ID。也可写作 `accountID` 或 `accountId`。不传时使用当前上下文账号或目标 IM 默认账号。
+</ParamField>
+
+<ParamField path="options.noCache" type="boolean">
+  是否绕过适配器缓存。也可写作 `no_cache`。
+</ParamField>
+
+<ParamField path="options.raw" type="boolean">
+  是否在每个成员对象里包含原始成员数据。也可写作 `includeRaw` 或 `include_raw`。
+</ParamField>
+
+<ParamField path="options.rawResult" type="boolean">
+  是否在返回体的 `raw` / `data` 中包含适配器原始结果。也可写作 `raw_result`、`includeRawResult`。
+</ParamField>
+
+<ParamField path="timeout" type="number" default="30000">
+  请求超时时间，单位毫秒。
+</ParamField>
+
+返回：
+
+```json
+{
+  "ok": true,
+  "im_type": "qq",
+  "account_id": "bot_qq_ops",
+  "group_id": "123456",
+  "members": [
+    {
+      "group_id": "123456",
+      "user_id": "10001",
+      "nickname": "Alice",
+      "card": "Alice A.",
+      "display_name": "Alice A.",
+      "role": "member",
+      "join_time": 1710000000,
+      "last_sent_time": 1710003600
+    }
+  ],
+  "raw": {},
+  "data": {}
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  获取成功时为 `true`。
+</ResponseField>
+
+<ResponseField name="im_type" type="string">
+  实际请求的 IM 类型。
+</ResponseField>
+
+<ResponseField name="account_id" type="string">
+  实际请求的账号 ID。未指定时可能为空。
+</ResponseField>
+
+<ResponseField name="group_id" type="string">
+  实际请求的群 ID。
+</ResponseField>
+
+<ResponseField name="members" type="GroupMember[]">
+  标准化成员数组。
+</ResponseField>
+
+<ResponseField name="raw" type="unknown">
+  仅传 `rawResult` / `raw_result` / `includeRawResult` 时包含适配器原始结果。
+</ResponseField>
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="发送媒体" icon="image" href="/cn/plugin-sdk/media">
+    查看媒体发送和适配器差异。
+  </Card>
+  <Card title="主动推送" icon="send" href="/cn/plugin-sdk/javascript/push">
+    查看文件和 mixed 主动推送。
+  </Card>
+</CardGroup>

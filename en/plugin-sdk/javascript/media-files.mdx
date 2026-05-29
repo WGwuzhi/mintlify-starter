@@ -1,0 +1,316 @@
+---
+title: "Events, media, and files"
+description: "Read event data, get media items, download user-uploaded files, and fetch group member lists."
+icon: "file-down"
+---
+
+This page covers event fields, `sender.getMediaItems()`, file downloads, and group member lists. When handling user-uploaded files, prefer normalized `MediaItem` objects and do not manually assemble platform download URLs.
+
+## Event methods
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `getPluginName()` | Get the current plugin title; returns the plugin name when no title exists. | None | `Promise<string>` |
+| `getPluginVersion()` | Get the current plugin version. | None | `Promise<string>` |
+| `getEventType()` | Get the current event type. | None | `Promise<string>` |
+| `setEventType(eventType)` | Set the event type in the current runtime context. | `eventType`: required. | `Promise<boolean>` |
+| `getEventData()` | Get current event data. Returns `{}` when absent. | None | `Promise<any>` |
+| `setEventData(eventData)` | Set current event data. | `eventData`: required, any JSON-like data. | `Promise<boolean>` |
+| `getMediaItems()` | Get media items from the current event or latest waited input. | None | `Promise<MediaItem[]>` |
+
+## `getMediaItems()`
+
+`getMediaItems()` lookup order:
+
+1. `last_input_media_items`: media captured by the latest `listen(...)` / `input(...)`.
+2. `media_items` / `mediaItems`: media array in the current runtime context.
+3. `event_data.media_items` / `event_data.mediaItems`: media array in current event data.
+4. Returns `[]` when none exist.
+
+Each object in the returned array is normalized to:
+
+<ResponseField name="type" type="string" required>
+  Media type, such as `image`, `voice`, `video`, or `file`. Only media items that have both `type` and `source` are kept.
+</ResponseField>
+
+<ResponseField name="source" type="string" required>
+  Media source. It may be a URL, local path, platform file ID, temporary resource ID, or adapter file identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Filename. The runtime chooses from `name`, `filename`, and `file_name`.
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  MIME type. The runtime chooses from `mime_type` or `mimeType`.
+</ResponseField>
+
+<ResponseField name="platform_payload" type="object">
+  Adapter raw file information. Keeping it improves adapter resolution success when downloading user-uploaded files.
+</ResponseField>
+
+```json
+[
+  {
+    "type": "file",
+    "source": "file_123",
+    "name": "card_keys.csv",
+    "mime_type": "text/csv",
+    "platform_payload": {
+      "file_id": "file_123",
+      "group_id": "123456"
+    }
+  }
+]
+```
+
+```js
+const items = await sender.getMediaItems()
+const image = items.find((item) => item.type === 'image')
+const file = items.find((item) => item.type === 'file')
+
+if (image) {
+  await sender.replyImage(image.source, { filename: image.name, mimeType: image.mime_type })
+}
+
+if (file) {
+  const saved = await downloadAdapterFile(file, { path: 'uploads' })
+  await sender.reply(`File saved to ${saved.path}`)
+}
+```
+
+<Warning>
+  Do not discard `platform_payload` before downloading. Some adapters need it to resolve platform file IDs into temporary download URLs.
+</Warning>
+
+## `fileDownload(url, path?)`
+
+Save a remote URL, `file://`, `base64://...`, or `data:*;base64,...` to a local file.
+
+<ParamField path="url" type="string" required>
+  File source. Supports `http://`, `https://`, `file://`, `base64://...`, and data URI.
+</ParamField>
+
+<ParamField path="path" type="string">
+  Save directory. If omitted, saves to the runtime download root. Relative paths are placed under the download root. Absolute paths are used as-is. Relative paths cannot escape the download root.
+</ParamField>
+
+```js
+const file = await fileDownload('https://example.com/report.csv', 'reports')
+await sender.replyFile(file.path, { filename: file.file_name, mimeType: file.mime_type })
+```
+
+Return value:
+
+```json
+{
+  "path": "/opt/autclaw/file/reports/report.csv",
+  "file_path": "/opt/autclaw/file/reports/report.csv",
+  "file_name": "report.csv",
+  "mime_type": "text/csv",
+  "file_size": 12345
+}
+```
+
+## `downloadAdapterFile(file, options?, timeout?)`
+
+Download a file uploaded by a user to an IM platform. Prefer passing the whole `MediaItem` returned by `sender.getMediaItems()`.
+
+<ParamField path="file" type="MediaItem | object | string" required>
+  User-uploaded file item. An object can contain `source`, `url`, `file_id`, `id`, `file`, `path`, or `platform_payload`. A string is treated as the file source. If you only have a normal URL, you can also call `fileDownload(url)` directly.
+</ParamField>
+
+<ParamField path="options.path" type="string">
+  Save directory. Same rules as `fileDownload(..., path)`.
+</ParamField>
+
+<ParamField path="options.fileName" type="string">
+  Saved filename. You can also write `file_name`, `filename`, or `name`.
+</ParamField>
+
+<ParamField path="options.mimeType" type="string">
+  MIME type. You can also write `mime_type`.
+</ParamField>
+
+<ParamField path="options.imType" type="string">
+  Optional IM type. You can also write `imtype` or `im_type`. If omitted, the current runtime context is used.
+</ParamField>
+
+<ParamField path="options.account_id" type="string">
+  Optional account ID. You can also write `accountID` or `accountId`. If omitted, the current runtime context account is used.
+</ParamField>
+
+<ParamField path="timeout" type="number" default="30000">
+  Request timeout in milliseconds. You can also pass a number directly as the second parameter, such as `downloadAdapterFile(file, 60000)`.
+</ParamField>
+
+### Download flow
+
+1. If `source` is already `http://`, `https://`, `data:`, `base64://`, or `file://`, the runtime downloads it directly.
+2. If `source` is a platform file ID or another identifier that cannot be downloaded directly, the runtime calls adapter `resolveFileURL`.
+3. After successful download, it saves the file to the runtime file directory and returns the local path.
+
+```js
+const items = await sender.getMediaItems()
+const fileItem = items.find((item) => item.type === 'file')
+
+if (fileItem) {
+  const saved = await downloadAdapterFile(fileItem, {
+    path: 'imports',
+    fileName: fileItem.name || 'upload.bin',
+    mimeType: fileItem.mime_type,
+  })
+  await sender.reply(`Saved: ${saved.file_name}`)
+}
+```
+
+Return value:
+
+```json
+{
+  "ok": true,
+  "action": "resolveFileURL",
+  "url": "https://adapter.example/temp/file.csv",
+  "path": "/opt/autclaw/file/imports/file.csv",
+  "file_path": "/opt/autclaw/file/imports/file.csv",
+  "file_name": "file.csv",
+  "mime_type": "text/csv",
+  "file_size": 2048
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  `true` when `downloadAdapterFile(...)` succeeds.
+</ResponseField>
+
+<ResponseField name="action" type="string">
+  Usually `resolveFileURL` if an adapter was called to resolve the download URL first. It may be empty for direct downloads.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Actual download URL or resolved temporary URL.
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  Saved local path.
+</ResponseField>
+
+<ResponseField name="file_path" type="string">
+  Same as `path`.
+</ResponseField>
+
+<ResponseField name="file_name" type="string">
+  Saved filename.
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  MIME type.
+</ResponseField>
+
+<ResponseField name="file_size" type="number">
+  File size in bytes.
+</ResponseField>
+
+## `getGroupMemberList(groupIDOrOptions?, options?, timeout?)`
+
+Get a group member list. The adapter must support `getGroupMemberList`.
+
+```js
+const result = await getGroupMemberList('123456', {
+  imType: 'qq',
+  account_id: 'bot_qq_ops',
+  noCache: true,
+})
+
+for (const member of result.members) {
+  console.log(member.user_id, member.display_name)
+}
+```
+
+<ParamField path="groupIDOrOptions" type="string | object">
+  A string means group ID. An object can contain `group_id`, `groupID`, `groupCode`, `group`, `chat_id`, `imType`, `account_id`, and other fields. If no group ID is passed, the runtime tries to use the current group chat context.
+</ParamField>
+
+<ParamField path="options.imType" type="string">
+  Target IM type. You can also write `im_type`. If omitted, the current context IM is used. Cron / fake contexts must pass it.
+</ParamField>
+
+<ParamField path="options.account_id" type="string">
+  Target account ID. You can also write `accountID` or `accountId`. If omitted, the current context account or target IM default account is used.
+</ParamField>
+
+<ParamField path="options.noCache" type="boolean">
+  Whether to bypass adapter cache. You can also write `no_cache`.
+</ParamField>
+
+<ParamField path="options.raw" type="boolean">
+  Whether to include raw member data in each member object. You can also write `includeRaw` or `include_raw`.
+</ParamField>
+
+<ParamField path="options.rawResult" type="boolean">
+  Whether to include the adapter raw result in returned `raw` / `data`. You can also write `raw_result` or `includeRawResult`.
+</ParamField>
+
+<ParamField path="timeout" type="number" default="30000">
+  Request timeout in milliseconds.
+</ParamField>
+
+Return value:
+
+```json
+{
+  "ok": true,
+  "im_type": "qq",
+  "account_id": "bot_qq_ops",
+  "group_id": "123456",
+  "members": [
+    {
+      "group_id": "123456",
+      "user_id": "10001",
+      "nickname": "Alice",
+      "card": "Alice A.",
+      "display_name": "Alice A.",
+      "role": "member",
+      "join_time": 1710000000,
+      "last_sent_time": 1710003600
+    }
+  ],
+  "raw": {},
+  "data": {}
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  `true` when the list is fetched successfully.
+</ResponseField>
+
+<ResponseField name="im_type" type="string">
+  Actual requested IM type.
+</ResponseField>
+
+<ResponseField name="account_id" type="string">
+  Actual requested account ID. It may be empty if not specified.
+</ResponseField>
+
+<ResponseField name="group_id" type="string">
+  Actual requested group ID.
+</ResponseField>
+
+<ResponseField name="members" type="GroupMember[]">
+  Normalized member array.
+</ResponseField>
+
+<ResponseField name="raw" type="unknown">
+  Contains the adapter raw result only when `rawResult` / `raw_result` / `includeRawResult` is passed.
+</ResponseField>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Send media" icon="image" href="/en/plugin-sdk/media">
+    See media sending and adapter differences.
+  </Card>
+  <Card title="Proactive push" icon="send" href="/en/plugin-sdk/javascript/push">
+    See file and mixed proactive push.
+  </Card>
+</CardGroup>

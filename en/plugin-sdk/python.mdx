@@ -261,14 +261,20 @@ delete("last_user")
 
 ### Named buckets
 
+A `.` in a `bucket` name means a child bucket. For example, `shop.orders` means `orders` under `shop`. The runtime allows up to 3 bucket levels. Prefer at most 3 levels to avoid overly deep permission configuration and troubleshooting.
+
 ```python
 import json
 
-bucketSet("my_plugin", "config", json.dumps({"enabled": True}))
-raw = bucketGet("my_plugin", "config")
-keys = bucketAllKeys("my_plugin")
-all_values = bucketAll("my_plugin")
+bucketSet("my_plugin.config", "runtime", json.dumps({"enabled": True}))
+bucketSet("my_plugin.users", "10001", json.dumps({"claimed": True}))
+
+raw = bucketGet("my_plugin.config", "runtime")
+keys = bucketAllKeys("my_plugin.users")
+all_values = bucketAll("my_plugin.users")
 ```
+
+Recommended examples: `my_plugin`, `my_plugin.users`, and `my_plugin.orders.paid`. Do not use names with more than 3 levels, such as `my_plugin.orders.paid.2026`.
 
 | Function / Sender method | Parameters | Returns |
 |---|---|---|

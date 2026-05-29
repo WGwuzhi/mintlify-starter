@@ -1,0 +1,159 @@
+---
+title: "Storage and routes"
+description: "Use default storage, named buckets, and handle HTTP route requests in JavaScript plugins."
+icon: "database"
+---
+
+Use storage to save plugin state. Use HTTP routes to turn a plugin into a simple handler. Route declarations live in manifest headers, and storage functions are imported directly from `middleware.js`.
+
+## Default storage
+
+Default storage uses the global bucket `otto` and is suitable for small plugin state.
+
+```js
+const { get, set, del } = require('./middleware.js')
+
+await set('last_user', '10001')
+const user = await get('last_user')
+await del('last_user')
+```
+
+| Function | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `get(key)` | Read from default storage. | `key`: required. | `Promise<string>`; returns an empty string when missing. |
+| `set(key, value)` | Write to default storage. | `key`: required; `value`: required and saved as a string. | `Promise<boolean>` |
+| `del(key)` | Delete a default storage key. | `key`: required. | `Promise<boolean>` |
+
+<Warning>
+  Storage values are saved as strings. To save objects, call `JSON.stringify(...)` before writing and `JSON.parse(...)` after reading.
+</Warning>
+
+## Bucket naming rules
+
+`bucket` is a storage namespace. A `.` in the name means a child bucket. For example, `shop.orders` means `orders` under `shop`. The runtime allows up to 3 bucket levels. Prefer at most 3 levels to avoid overly deep permission configuration, data migration, and troubleshooting.
+
+<ParamField path="bucket" type="string" required>
+  Bucket name. It cannot be empty. Use `.` to separate levels. Each segment must be non-empty. Maximum 3 levels. Examples: `my_plugin`, `my_plugin.users`, `my_plugin.orders.paid`.
+</ParamField>
+
+<Tip>
+  Use `plugin_name.business_domain.state`, such as `card_claim.users` or `card_claim.inventory.active`. For a small plugin, use a one-level bucket such as `my_plugin`.
+</Tip>
+
+| Bucket name | Levels | Recommendation | Description |
+|---|---:|---|---|
+| `my_plugin` | 1 | Recommended | Good for simple configuration and small state. |
+| `my_plugin.users` | 2 | Recommended | Good for splitting users, orders, and cache by business domain. |
+| `my_plugin.orders.paid` | 3 | Usable | Reaches the recommended limit; use only when you truly need this subdivision. |
+| `my_plugin.orders.paid.2026` | 4 | Invalid | Exceeds the runtime maximum level. |
+| `my_plugin..users` | Invalid | Invalid | Contains an empty segment. |
+
+<Warning>
+  Do not treat `.` as a normal character inside one level. `a.b` is interpreted as a two-level bucket, not one bucket named `a.b`.
+</Warning>
+
+## Named buckets
+
+Named buckets isolate plugin state by plugin name or business domain. The bucket isolates the namespace, and the `key` locates a specific record.
+
+```js
+const { bucketGet, bucketSet, bucketAllKeys, bucketAll } = require('./middleware.js')
+
+const config = { enabled: true, limit: 10 }
+await bucketSet('my_plugin.config', 'runtime', JSON.stringify(config))
+await bucketSet('my_plugin.users', '10001', JSON.stringify({ claimed: true }))
+
+const raw = await bucketGet('my_plugin.config', 'runtime')
+const parsed = raw ? JSON.parse(raw) : {}
+
+const keys = await bucketAllKeys('my_plugin.users')
+const all = await bucketAll('my_plugin.users')
+```
+
+| Function / Sender method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `bucketGet(bucket, key)` | Read a key in the specified bucket. | `bucket`: required, supports `.` child levels, maximum 3 levels; `key`: required. | `Promise<string>`; returns an empty string when missing. |
+| `bucketSet(bucket, key, value)` | Write to the specified bucket. | `bucket`: required, supports `.` child levels, maximum 3 levels; `key`: required; `value`: required and saved as a string. | `Promise<boolean>` |
+| `bucketDel(bucket, key)` | Delete a key in the specified bucket. | `bucket`: required, supports `.` child levels, maximum 3 levels; `key`: required. | `Promise<boolean>` |
+| `bucketKeys(bucket?, value?)` | Get keys whose values equal `value` in the specified bucket. Without `value`, returns all keys. | `bucket`: optional, defaults to `otto`; `value`: optional. | `Promise<string[]>` |
+| `bucketAllKeys(bucket)` | Get all keys in the specified bucket. | `bucket`: required. | `Promise<string[]>` |
+| `bucketAll(bucket)` | Get all key-value pairs in the specified bucket. | `bucket`: required. | `Promise<Record<string, string>>` |
+
+`Sender` instances also provide bucket methods with the same names. They additionally carry the current `senderid`, which is useful when you need the permission system to check bucket access by the current run.
+
+```js
+await sender.bucketSet('my_plugin.users', 'user:' + await sender.getUserID(), 'seen')
+```
+
+## HTTP route requests
+
+After declaring `router` and `method` in the manifest, scripts can read HTTP requests and return responses. See [`Plugin manifest headers`](/en/plugin-sdk/manifest) for header declarations.
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[router: /demo/{id}]
+//[method: post]
+const { Sender, getSenderID } = require('./middleware.js')
+
+async function main() {
+  const sender = new Sender(getSenderID())
+  const params = await sender.getRouterParams()
+  const body = await sender.getRouterBody()
+  await sender.response({ ok: true, id: params.id, body })
+}
+
+main().catch(console.error)
+```
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `getRouterPath()` / `getRouter()` | Get the current route path. | None | `Promise<string>` |
+| `getRouterParams()` | Get path parameters, such as `{ id: '42' }`. | None | `Promise<Record<string, string>>` |
+| `getRouterMethod()` / `getMethod()` | Get the request method. | None | `Promise<string>` |
+| `getRouterHeaders()` | Get request headers. | None | `Promise<Record<string, string or string[]>>` |
+| `getRouterCookies()` | Get cookies. | None | `Promise<Record<string, string>>` |
+| `getRouterBody()` | Get the parsed request body. Returns `{}` when there is no body. | None | `Promise<any>` |
+| `getRouterData()` | Get the request body as a JSON string. | None | `Promise<string>` |
+| `response(data)` | Set HTTP response data. | `data`: required, any JSON-like data. | `Promise<boolean>` |
+
+<ParamField path="data" type="unknown" required>
+  Response body for `response(data)`. It can be an object, array, string, number, or boolean.
+</ParamField>
+
+Actual `response(...)` example:
+
+```json
+{
+  "ok": true,
+  "id": "42",
+  "body": {
+    "name": "demo"
+  }
+}
+```
+
+<Note>
+  Calling `reply('text')` or `replyMarkdown('...')` in a route run also writes `response_data`, which is useful for returning plain text. Use `response(data)` when you need to return an object.
+</Note>
+
+## Top-level route aliases
+
+`middleware.js` also exports route-reading aliases bound to the default `Sender`:
+
+| Function | Equivalent method |
+|---|---|
+| `getRouter()` | `new Sender(getSenderID()).getRouterPath()` |
+| `getMethod()` | `new Sender(getSenderID()).getRouterMethod()` |
+| `getRouterData()` | `new Sender(getSenderID()).getRouterData()` |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manifest headers" icon="file-code" href="/en/plugin-sdk/manifest">
+    See `router`, `method`, `param`, and `dependency` declarations.
+  </Card>
+  <Card title="Tools and dependencies" icon="wrench" href="/en/plugin-sdk/javascript/tools-cron-group">
+    See `importModule(...)` and system utility functions.
+  </Card>
+</CardGroup>

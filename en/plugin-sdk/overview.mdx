@@ -91,7 +91,7 @@ autClaw plugins can read messages, reply with text or media, save configuration,
   <Card title="Manifest headers" icon="file-code" href="/en/plugin-sdk/manifest">
     Declare the plugin name, author, trigger rules, parameters, dependencies, routes, and scheduled tasks.
   </Card>
-  <Card title="JavaScript middleware" icon="square-js" href="/en/plugin-sdk/javascript">
+  <Card title="JavaScript middleware" icon="braces" href="/en/plugin-sdk/javascript">
     Learn JavaScript usage for `Sender`, storage, files, routes, input waiting, and cron.
   </Card>
   <Card title="Python middleware" icon="code" href="/en/plugin-sdk/python">
@@ -131,7 +131,7 @@ Minimum headers:
 - Use `Sender` to read context and reply to messages.
 - Use `replyImage`, `replyVoice`, `replyVideo`, `replyFile`, or `replyMixed` for media.
 - Use `sender.getMediaItems()` + `downloadAdapterFile(...)` for user-uploaded files.
-- Put configuration fields in `param`; put runtime state in `bucketSet(...)`.
+- Put configuration fields in `param`; put runtime state in `bucketSet(...)`. Bucket names can use `.` for child levels; prefer at most 3 levels.
 - Prefer declaring dependencies with `dependency`; use `importModule(...)` or `import_module(...)` for temporary dependencies.
 
 ## Avoid these patterns

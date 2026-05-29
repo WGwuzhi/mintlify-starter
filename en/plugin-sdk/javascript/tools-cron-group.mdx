@@ -1,0 +1,183 @@
+---
+title: "Tools, Cron, and group management"
+description: "Use importModule, importJs, system utilities, runtime Cron, and group management methods."
+icon: "wrench"
+---
+
+This page covers `middleware.js` utility functions, cross-file references, runtime scheduled commands, and group management methods. Public plugins should prefer the explicitly listed functions and avoid relying on unpublished internal actions.
+
+## `importModule(module, versionOrOptions?, manager?)`
+
+Ensure an npm dependency is available, then return the result of `require(module)`.
+
+<ParamField path="module" type="string" required>
+  Module name used by `require(...)`.
+</ParamField>
+
+<ParamField path="versionOrOptions" type="string | object">
+  A string means version. An object can contain `package`, `version`, and `manager`.
+</ParamField>
+
+<ParamField path="versionOrOptions.package" type="string">
+  Real package name. Use this when the package name differs from the import name, such as subpath imports or aliased packages.
+</ParamField>
+
+<ParamField path="versionOrOptions.version" type="string">
+  Required version.
+</ParamField>
+
+<ParamField path="versionOrOptions.manager" type="string">
+  Package manager name. Usually you do not need to pass this; the runtime handles it by default.
+</ParamField>
+
+```js
+const { importModule } = require('./middleware.js')
+
+const dayjs = await importModule('dayjs')
+const lodash = await importModule('lodash', '4.17.21')
+const axios = await importModule('axios', {
+  package: 'axios',
+  version: '1.7.9',
+  manager: 'npm',
+})
+```
+
+<Tip>
+  Prefer declaring fixed dependencies in manifest `dependency`. `importModule(...)` is useful for on-demand loading or compatibility with older plugins.
+</Tip>
+
+## `importJs(target)`
+
+`importJs(...)` is a global function in the ES5 / JavaScript runtime. It references other `.js` files in the plugin workspace, or files from another plugin in the same JavaScript runtime family. It eventually returns `module.exports` from the target file, similar to `require(resolvedPath)`.
+
+```js
+// Reference hook.js in the current plugin workspace.
+const hook = importJs('hook')
+
+// Reference hook.js from another plugin.
+const marketHook = importJs('specter:hook.js')
+```
+
+### `target` format
+
+| Syntax | Meaning |
+|---|---|
+| `importJs('hook')` | Look up `hook.js` in the current runtime workspace. Adds `.js` automatically when no extension exists. |
+| `importJs('lib/tool.js')` | Look up `lib/tool.js` in the current runtime workspace. |
+| `importJs('specter:hook.js')` | Cross-plugin reference: text before the colon is the target plugin namespace, text after the colon is the file path inside the target plugin. |
+| `require('specter:hook.js')` | Node.js / JavaScript runtime also normalizes this scoped request to the target file in the workspace. |
+
+`source_script_id` / namespace matching rules:
+
+- The `specter` before the colon is not a folder name. The runtime matches it against the target plugin author, plugin name, marketplace author, plugin ID prefix, and marketplace source script ID (`source_script_id`) prefix.
+- For marketplace plugins, `source_script_id` usually looks like `specter:hook`. The runtime uses the prefix before the colon, so `importJs('specter:hook.js')` can locate that source plugin.
+- If both a marketplace plugin and a local plugin match the same namespace, the marketplace plugin wins. If no marketplace match exists, local plugins are considered.
+
+### File resolution behavior
+
+- The path after the colon is the file path inside the target plugin. For example, `specter:lib/hook` resolves to `lib/hook.js` in the target plugin.
+- `.js` is added automatically when no extension exists.
+- The target file is copied into the current runtime workspace, and the runtime only loads from the workspace.
+- Escaping the workspace is prohibited. For example, if resolution lands outside the workspace, it reports `importJs target is outside runtime workspace`.
+- A missing target reports `importJs target not found`. If no cross-plugin namespace match exists, the runtime continues as a normal current-workspace file lookup and then reports not found if still missing.
+- Only the same runtime family can reference each other: `es5` can only reference `es5`; `nodejs` / `typescript` can reference each other; they cannot cross to Python or other runtimes.
+- If the namespace matches a plugin but the runtime family is incompatible, it reports runtime mismatch directly instead of falling back to mixed use.
+
+<Warning>
+  `importJs(...)` is for reusing common helpers. Do not use it to read user data, logs, databases, or secret files. Do not rely on the internal file structure of unpublished plugins.
+</Warning>
+
+## System and utility functions
+
+| Function | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `render(template, selector, data)` | Render HTML / template, often to generate images. The current runtime may return an empty result depending on deployment capability. | `template`: template code; `selector`: selector; `data`: template data. | `Promise<any>` |
+| `getActiveImtypes()` | Get enabled IM types. | None | `Promise<string[]>` |
+| `name()` | Get bot name. | None | `Promise<string>` |
+| `domain()` | Get local runtime domain, usually `http://127.0.0.1:<port>`. | None | `Promise<string>` |
+| `port()` | Get autClaw service port. | None | `Promise<string or number>` |
+| `machineId()` | Get machine ID. | None | `Promise<string>` |
+| `version()` | Get autClaw version. | None | `Promise<string>` |
+| `versionInfo()` | Get structured version information. | None | `Promise<object>` |
+| `notifyMasters(content, imtypes?)` | Send notifications to administrators. | `content`: required; `imtypes`: optional IM type array. | `Promise<number>`, send count. |
+| `coffee()` | Get coffee-code activation status. | None | `Promise<boolean>` |
+| `spread(msg)` | Legacy promotion-link conversion entry point. Returns an empty string when the related capability is not configured. | `msg`: required. | `Promise<string>` |
+| `getHistoryMessages(imtype?)` | Get recent message history. | `imtype`: optional IM type. | `Promise<any[]>` |
+| `generateFromSinglePrompt(prompt)` | Legacy single-prompt generation entry point. The current runtime may return an empty string. | `prompt`: required. | `Promise<string>` |
+| `accessService(path, body?, timeout?)` | Call runtime compatibility APIs. | `path`: required internal action path; `body`: optional; `timeout`: optional milliseconds. | `Promise<any>` |
+
+<Warning>
+  `accessService(...)` is a low-level compatibility entry point. Public plugins should prefer the methods explicitly listed on this page and avoid relying on unpublished internal actions.
+</Warning>
+
+## `Cron`
+
+`Cron` manages runtime scheduled commands. It is different from manifest-level `cron`:
+
+- `//[cron: ...]`: triggers the current plugin on a fixed expression.
+- `new Cron()`: dynamically adds, removes, updates, and lists runtime scheduled commands while a plugin runs.
+
+```js
+const { Cron } = require('./middleware.js')
+
+const cron = new Cron()
+const items = await cron.getCrons()
+cron.addCron('0 9 * * *', false, 'daily reminder', true, null, 'Daily reminder')
+
+console.log(items)
+```
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `getCrons()` | Get the list of scheduled commands created by the current runtime. | None | `Promise<RuntimeCronItem[]>` |
+| `getCron(id)` | The current helper requests the runtime cron list with `id`; the actual runtime returns the current run's list. | `id`: scheduled command ID. | `Promise<RuntimeCronItem[]>` |
+| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | Add a runtime scheduled command. | `cron`: required cron expression; `cmd`: required trigger command; remaining fields keep compatibility with old signatures. | Current JS helper sends the request but returns no result. |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | Update a runtime scheduled command. | `id`, `cron`, and `cmd` are required; remaining fields keep compatibility with old signatures. | Current JS helper sends the request but returns no result. |
+| `delCron(id)` | Delete a runtime scheduled command. | `id`: required. | Current JS helper sends the request but returns no result. |
+
+`RuntimeCronItem` example:
+
+```json
+{
+  "id": "runtime_1",
+  "cron": "0 9 * * *",
+  "cmd": "daily reminder",
+  "memo": "Daily reminder",
+  "source": "runtime_api",
+  "next_run_at": "2026-05-29T09:00:00+08:00"
+}
+```
+
+<Note>
+  A new run triggered by runtime cron has source `runtime_api`, and its parameters include `runtime_cron_id` and `cmd`. If you only need to run the current plugin on a fixed schedule, prefer manifest `cron`.
+</Note>
+
+## Group management
+
+These methods depend on current IM adapter support. Unsupported adapters may return errors or have no effect. The current JS helper sends requests but does not return a Promise. If you need to confirm the result, use an adapter-supported explicit API or wait for future SDK improvements.
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `groupInviteIn(friend, group)` | Invite a friend into a group. | `friend`: required friend ID; `group`: required group ID. | `void` |
+| `groupKick(userid)` | Kick a group member. | `userid`: required user ID. | `void` |
+| `groupBan(userid, timeout)` | Mute a group member. | `userid`: required user ID; `timeout`: required mute seconds or adapter-required unit. | `void` |
+| `groupUnban(userid)` | Unmute a member. | `userid`: required user ID. | `void` |
+| `groupWholeBan()` | Enable whole-group mute. | None | `void` |
+| `groupWholeUnban()` | Disable whole-group mute. | None | `void` |
+| `groupNoticeSend(notice)` | Send a group announcement. | `notice`: required announcement content. | `void` |
+
+```js
+sender.groupBan('10001', 600)
+sender.groupNoticeSend('Maintenance tonight at 22:00. Save your work in advance.')
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manifest cron" icon="file-code" href="/en/plugin-sdk/manifest">
+    See how to declare fixed scheduled triggers.
+  </Card>
+  <Card title="Proactive push" icon="send" href="/en/plugin-sdk/javascript/push">
+    See push account selection in cron / fake contexts.
+  </Card>
+</CardGroup>

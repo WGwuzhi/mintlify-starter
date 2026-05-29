@@ -1,0 +1,204 @@
+---
+title: "上下文和类型"
+description: "理解 Sender 运行上下文、账号选择基础和常用返回体。"
+icon: "circle-dot"
+---
+
+本页解释 `middleware.js` 的基础运行模型和通用返回体。开始写业务逻辑前，先确认你的插件运行在消息、HTTP 路由还是 cron / fake 上下文。
+
+## 运行上下文
+
+每次插件运行都会有一个 `senderID`。消息触发时，`senderID` 包含 IM、账号、会话和用户；cron 触发时使用 `fake` 运行上下文；路由触发时使用路由上下文。
+
+| 场景 | `getImtype()` | 回复目标 | 主动推送账号选择 |
+|---|---|---|---|
+| 消息触发 | 当前消息 IM，例如 `qq`、`weixin` | 当前会话和当前接收账号 | 目标 IM 等于当前 IM 时，默认使用当前会话账号。 |
+| cron / fake | `fake` | `reply*` 默认不发送真实 IM 消息 | 使用目标 IM 的默认账号。 |
+| HTTP 路由 | 路由上下文 | `reply(...)` / `replyMarkdown(...)` 会写入路由响应数据 | 使用目标 IM 的默认账号，除非显式传 `account_id`。 |
+| 跨 IM 推送 | 当前上下文 IM 不等于目标 IM | 不适用 | 使用目标 IM 的默认账号。 |
+
+<Tip>
+  `push(...)` 可以通过 `options.account_id` 显式指定发送账号。显式 `account_id` 优先于当前会话账号和目标 IM 默认账号。多账号插件建议在文本主动推送时显式指定。
+</Tip>
+
+```js
+const { Sender, getSenderID, push } = require('./middleware.js')
+const sender = new Sender(getSenderID())
+
+// 消息来自 qq:bot_qq_2，且目标 IM 也是 qq：默认使用 bot_qq_2。
+await push('qq', '123456', '', '通知', '处理完成')
+
+// 显式 account_id 优先：这里会改用 bot_qq_ops。
+await push('qq', '123456', '', '通知', '处理完成', {
+  account_id: 'bot_qq_ops',
+})
+
+// 跨 IM 推送：消息来自 qq，但推到 weixin；默认使用 weixin 默认账号。
+await push('weixin', '', 'wxid_user', '通知', '处理完成')
+```
+
+## 运行时返回包装
+
+插件调用拿到的是 `data` 字段，不需要处理 HTTP 包装。底层运行时响应格式如下：
+
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "ok": true
+  },
+  "request_id": "req_abc123"
+}
+```
+
+如果请求失败，`middleware.js` 会把运行时错误转成 `Error` 抛出。
+
+## `SendReceipt`
+
+文本、媒体、混合消息和撤回类方法通常返回发送回执。
+
+```json
+{
+  "ok": true,
+  "message_id": "msg_123456",
+  "messageid": "msg_123456",
+  "message_ids": ["msg_123456"],
+  "raw": {
+    "adapter": "qq"
+  },
+  "action": "sendText"
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  是否发送成功。适配器未显式返回时，运行时会补为 `true`。
+</ResponseField>
+
+<ResponseField name="message_id" type="string">
+  标准消息 ID。撤回消息时把它传给 `recallMessage(...)`。
+</ResponseField>
+
+<ResponseField name="messageid" type="string">
+  兼容旧插件的消息 ID 字段，通常与 `message_id` 相同。
+</ResponseField>
+
+<ResponseField name="message_ids" type="string[]">
+  多段消息或适配器返回多个 ID 时使用。只有单条消息时通常包含一个 ID。
+</ResponseField>
+
+<ResponseField name="raw" type="unknown">
+  适配器原始回执。需要排查平台问题时再读取。
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  适配器可能返回的失败说明。失败时优先检查 `receipt.ok === false` 和 `receipt.error`。
+</ResponseField>
+
+## `FileDownloadResult`
+
+`fileDownload(...)` 返回 `FileDownloadResult`，`downloadAdapterFile(...)` 返回同样字段并额外包含 `ok`、`url`、`action`。
+
+```json
+{
+  "ok": true,
+  "action": "resolveFileURL",
+  "url": "https://adapter.example/files/card_keys.csv",
+  "path": "/opt/autclaw/file/imports/card_keys.csv",
+  "file_path": "/opt/autclaw/file/imports/card_keys.csv",
+  "file_name": "card_keys.csv",
+  "mime_type": "text/csv",
+  "file_size": 12345
+}
+```
+
+<ResponseField name="ok" type="boolean">
+  仅 `downloadAdapterFile(...)` 一定返回。表示文件已保存。
+</ResponseField>
+
+<ResponseField name="action" type="string">
+  当 SDK 需要先通过适配器把平台文件 ID 换成下载 URL 时，值通常是 `resolveFileURL`；直接下载 URL 时可能为空。
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  实际下载地址。可能是原始 URL，也可能是适配器解析后的临时 URL。
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  保存后的本地路径。推荐把这个字段传给 `replyImage(...)`、`replyFile(...)` 等媒体方法。
+</ResponseField>
+
+<ResponseField name="file_path" type="string">
+  与 `path` 相同，兼容更明确的字段名。
+</ResponseField>
+
+<ResponseField name="file_name" type="string">
+  保存后的文件名。
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  检测或传入的 MIME 类型，例如 `image/png`、`text/csv`。
+</ResponseField>
+
+<ResponseField name="file_size" type="number">
+  文件大小，单位为字节。
+</ResponseField>
+
+## `MediaItem`
+
+`sender.getMediaItems()` 返回标准化媒体数组。它会优先返回最近一次 `listen(...)` / `input(...)` 捕获到的媒体；否则返回当前事件里的 `media_items` / `mediaItems`。
+
+```json
+[
+  {
+    "type": "file",
+    "source": "file_123",
+    "name": "card_keys.csv",
+    "mime_type": "text/csv",
+    "platform_payload": {
+      "file_id": "file_123"
+    }
+  },
+  {
+    "type": "image",
+    "source": "https://example.com/demo.png",
+    "name": "demo.png",
+    "mime_type": "image/png"
+  }
+]
+```
+
+<ResponseField name="type" type="'image' | 'voice' | 'video' | 'file' | string" required>
+  媒体类型。当前标准化流程主要保留有 `type` 和 `source` 的媒体项。
+</ResponseField>
+
+<ResponseField name="source" type="string" required>
+  媒体来源。可能是 URL、本地路径、临时资源 ID、平台文件 ID 或适配器原始文件标识。
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  文件名或展示名。运行时会从 `name`、`filename`、`file_name` 中标准化为 `name`。
+</ResponseField>
+
+<ResponseField name="mime_type" type="string">
+  MIME 类型。运行时会从 `mime_type` 或 `mimeType` 标准化。
+</ResponseField>
+
+<ResponseField name="platform_payload" type="object">
+  平台原始文件信息，例如 `file_id`、`path`、`url`。下载用户上传文件时直接把整个 `MediaItem` 传给 `downloadAdapterFile(...)`。
+</ResponseField>
+
+<Warning>
+  不要自己拼接平台文件下载地址。把 `MediaItem` 原样传给 `downloadAdapterFile(...)`，让适配器处理平台差异和临时 URL。
+</Warning>
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="读取和回复消息" icon="message-circle" href="/cn/plugin-sdk/javascript/sender-messages">
+    查看 `Sender` 的消息上下文、回复和撤回方法。
+  </Card>
+  <Card title="主动推送账号规则" icon="send" href="/cn/plugin-sdk/javascript/push">
+    查看 `push(...)` 的 `account_id` 优先级和跨 IM 行为。
+  </Card>
+</CardGroup>

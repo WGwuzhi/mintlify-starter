@@ -1,0 +1,246 @@
+---
+title: "等待输入和支付"
+description: "等待用户输入、捕获媒体、等待支付事件，并处理 waitPay 的 amount 匹配结果。"
+icon: "hourglass"
+---
+
+`listen(...)`、`input(...)` 和 `waitPay(...)` 会阻塞当前插件运行，直到收到匹配事件、超时或用户发送退出口令。支付类插件建议把超时、取消和金额不匹配都显式处理。
+
+## `listen(waitTime, recallTime?, scope?)`
+
+等待同一会话、同一账号下的下一条用户输入。超时返回空字符串 `""`。
+
+<ParamField path="waitTime" type="number" required>
+  等待时间，单位毫秒。运行时会归一化：默认 `60000` ms，最小 `1000` ms，最大通常为 `900000` ms。
+</ParamField>
+
+<ParamField path="recallTime" type="number | 'group'" default="0">
+  收到输入后延迟撤回用户消息的毫秒数。若第二个参数直接传 `'group'`，SDK 会把它识别为 `scope`，并把 `recallTime` 置为 `0`。
+</ParamField>
+
+<ParamField path="scope" type="'group' | string">
+  传 `'group'` 时，允许同群任意成员回答；不传时只等待当前用户。
+</ParamField>
+
+```js
+await sender.reply('请在 60 秒内发送验证码')
+const code = await sender.listen(60000)
+
+if (!code) {
+  await sender.reply('已超时，请重新开始。')
+} else {
+  await sender.reply(`收到：${code}`)
+}
+```
+
+## `input(waitTime, recallTime?, scope?)`
+
+`input(...)` 是 `listen(...)` 的别名，参数和返回值一致。
+
+```js
+await sender.reply('请群内任意成员在 60 秒内确认，回复 y')
+const answer = await sender.input(60000, 0, 'group')
+
+if (answer !== 'y') {
+  await sender.reply('未确认。')
+}
+```
+
+如果等待到的是带媒体的消息，`input(...)` 返回文本内容；媒体从 `sender.getMediaItems()` 读取。
+
+```js
+const { downloadAdapterFile } = require('./middleware.js')
+
+await sender.reply('请发送一个 CSV 文件')
+const text = await sender.input(60000)
+const items = await sender.getMediaItems()
+const csv = items.find((item) => item.type === 'file')
+
+if (!csv) {
+  await sender.reply(`没有收到文件，收到文本：${text || '空'}`)
+  return
+}
+
+const saved = await downloadAdapterFile(csv, { path: 'imports' })
+await sender.reply(`已保存：${saved.file_name}，大小：${saved.file_size} bytes`)
+```
+
+## `waitPay(exitcode, timeout, amount?)`
+
+等待支付事件或退出口令。它会使用当前运行上下文里的 IM、账号、会话和用户来注册支付等待；如果支付配置不可用，会退化为 legacy 等待支付事件。
+
+<ParamField path="exitcode" type="string" required>
+  退出口令。等待期间用户发送完全相同文本时，方法返回该字符串并结束等待。传空字符串时表示不启用用户退出口令。
+</ParamField>
+
+<ParamField path="timeout" type="number" required>
+  等待时间，单位毫秒。运行时会按输入等待上限归一化，通常最大 `900000` ms。
+</ParamField>
+
+<ParamField path="amount" type="string | number">
+  期望收款金额。SDK 会把它作为 `expected_amount` 发送给运行时；`undefined`、`null` 或空字符串不会发送该字段。
+</ParamField>
+
+### `amount` 会改变什么
+
+传入有效 `amount` 后，运行时会：
+
+1. 把金额写入支付等待元数据 `ExpectedAmount`。
+2. 在启用支付存储时，把金额写入支付记录的 `expected_amount`。
+3. 支付成功返回对象时，追加 `expected_amount` 和 `amount_matched`。
+4. 对强制支付宝转账链接场景，把转账链接金额设置为该期望金额；未传金额时使用默认 `0.01`。
+
+<Warning>
+  `amount` 不是所有支付通道的通用硬过滤条件。不同通道可能仍会把支付事件投递给等待流程。发货、开通权限或发卡前，你应检查返回对象里的 `amount_matched === true`。
+</Warning>
+
+### `amount` 不会改变什么
+
+- 超时仍返回字符串 `"timeout"`。
+- 并发冲突仍返回字符串 `"busy"`。
+- 用户发送 `exitcode` 仍返回该退出口令字符串。
+- 没有成功支付对象时，不会凭空返回 `expected_amount` 或 `amount_matched`。
+
+### 返回值
+
+<Tabs sync={false}>
+  <Tab title="超时">
+    ```json
+    "timeout"
+    ```
+
+    等待时间耗尽时返回。你应该提示用户重新发起流程。
+  </Tab>
+  <Tab title="忙碌">
+    ```json
+    "busy"
+    ```
+
+    当前支付通道或会话已有冲突的等待流程时返回。你可以让用户稍后再试。
+  </Tab>
+  <Tab title="退出口令">
+    ```json
+    "q"
+    ```
+
+    用户发送 `exitcode` 时返回。返回值就是传入的退出口令。
+  </Tab>
+  <Tab title="支付成功">
+    ```json
+    {
+      "event_type": "payment",
+      "event_category": "payment",
+      "payment_channel": "epay",
+      "payment_type": "payment",
+      "order_id": "pay_8f1c2a3b4d5e6f70",
+      "trade_no": "202605280001",
+      "money": 19.8,
+      "Money": 19.8,
+      "received_amount": 19.8,
+      "expected_amount": 19.8,
+      "amount_matched": true,
+      "time": "2026-05-28T12:00:00Z"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<ResponseField name="money" type="number | string">
+  收到的付款金额。运行时会兼容补充 `Money` 字段；如果事件只有 `received_amount`，会用它补 `money` / `Money`。
+</ResponseField>
+
+<ResponseField name="Money" type="number | string">
+  兼容旧插件的大写金额字段，通常与 `money` 相同。
+</ResponseField>
+
+<ResponseField name="received_amount" type="number | string">
+  支付事件中的实际收款金额。不是所有通道都会返回该字段。
+</ResponseField>
+
+<ResponseField name="expected_amount" type="number">
+  仅当 `amount` 归一化后大于 `0` 时返回。表示本次等待期望收到的金额。
+</ResponseField>
+
+<ResponseField name="amount_matched" type="boolean">
+  实收金额与期望金额是否匹配。运行时按 `money` 与 `expected_amount` 比较，误差小于 `0.001` 视为匹配；缺少任一金额或金额小于等于 `0` 时为 `false`。
+</ResponseField>
+
+<ResponseField name="order_id" type="string">
+  等待支付流程生成或通道返回的订单号。启用支付配置时通常形如 `pay_<hex>`。
+</ResponseField>
+
+<ResponseField name="trade_no" type="string">
+  支付通道交易号。是否存在取决于通道事件。
+</ResponseField>
+
+### 安全处理模板
+
+```js
+const result = await sender.waitPay('q', 120000, 19.8)
+
+if (result === 'timeout') {
+  await sender.reply('支付已超时，请重新发起。')
+  return
+}
+
+if (result === 'busy') {
+  await sender.reply('当前已有支付等待，请稍后再试。')
+  return
+}
+
+if (result === 'q') {
+  await sender.reply('已取消支付。')
+  return
+}
+
+if (!result || typeof result !== 'object') {
+  await sender.reply('没有收到有效支付结果。')
+  return
+}
+
+if (result.expected_amount && result.amount_matched !== true) {
+  await sender.reply(`金额不匹配，应付 ${result.expected_amount}，实付 ${result.money || result.received_amount || '未知'}。`)
+  return
+}
+
+await sender.reply('支付成功，正在发货。')
+```
+
+### 常见问题
+
+<AccordionGroup>
+  <Accordion title="传入 amount 后返回体一定会变化吗？">
+    只有支付成功并返回对象时，才会看到 `expected_amount` 和 `amount_matched`。如果返回 `"timeout"`、`"busy"` 或退出口令字符串，返回体不变。
+  </Accordion>
+  <Accordion title="amount 可以传字符串吗？">
+    可以。运行时会把数字、数字字符串、带 `¥` / `￥` 前缀或逗号分隔的金额归一化为数字。JS helper 只要发现 `amount` 不是 `undefined`、`null` 或空字符串，就会发送 `expected_amount`；运行时无法解析或解析后小于等于 `0` 时，不会在成功对象中追加有效 `expected_amount`。
+  </Accordion>
+  <Accordion title="amount 会自动拒绝金额不匹配的支付吗？">
+    不要这样假设。它会记录期望金额并在成功返回对象里给出 `amount_matched`。部分通道或下单方式可能用期望金额辅助匹配，但插件业务仍应在发货前检查 `amount_matched`。
+  </Accordion>
+</AccordionGroup>
+
+## `atWaitPay()`
+
+判断当前运行时是否存在等待支付流程。
+
+| 方法 | 参数 | 返回 |
+|---|---|---|
+| `atWaitPay()` | 无 | `Promise<boolean>` |
+
+```js
+if (await sender.atWaitPay()) {
+  await sender.reply('已有支付等待中，请稍后。')
+}
+```
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="事件和媒体项" icon="file-down" href="/cn/plugin-sdk/javascript/media-files">
+    查看等待输入后如何读取用户上传文件。
+  </Card>
+  <Card title="支付插件权限和配置" icon="file-code" href="/cn/plugin-sdk/manifest">
+    查看 manifest header 和参数声明。
+  </Card>
+</CardGroup>

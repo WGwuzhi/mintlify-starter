@@ -1,5 +1,6 @@
 ---
-title: "Python middleware reference"
+title: "Python 中间件参考"
+icon: "code"
 description: "在 Python 插件中读取上下文、回复消息、发送媒体、保存数据、处理路由和定时任务。"
 ---
 
@@ -261,14 +262,20 @@ delete("last_user")
 
 ### 命名 bucket
 
+`bucket` 名称里的 `.` 表示子级 bucket，例如 `shop.orders` 表示 `shop` 下的 `orders`。运行时最多允许 3 级 bucket；推荐最多使用 3 级，避免权限配置和排查问题时层级过深。
+
 ```python
 import json
 
-bucketSet("my_plugin", "config", json.dumps({"enabled": True}))
-raw = bucketGet("my_plugin", "config")
-keys = bucketAllKeys("my_plugin")
-all_values = bucketAll("my_plugin")
+bucketSet("my_plugin.config", "runtime", json.dumps({"enabled": True}))
+bucketSet("my_plugin.users", "10001", json.dumps({"claimed": True}))
+
+raw = bucketGet("my_plugin.config", "runtime")
+keys = bucketAllKeys("my_plugin.users")
+all_values = bucketAll("my_plugin.users")
 ```
+
+推荐示例：`my_plugin`、`my_plugin.users`、`my_plugin.orders.paid`。不要使用超过 3 级的名称，例如 `my_plugin.orders.paid.2026`。
 
 | 函数 / Sender 方法 | 参数 | 返回 |
 |---|---|---|

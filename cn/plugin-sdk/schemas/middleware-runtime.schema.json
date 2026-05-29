@@ -163,11 +163,19 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "event_type": { "type": "string" },
+        "event_category": { "type": "string" },
+        "payment_channel": { "type": "string" },
+        "payment_type": { "type": "string" },
         "money": { "type": ["string", "number"] },
         "Money": { "type": ["string", "number"] },
+        "received_amount": { "type": ["string", "number"] },
+        "expected_amount": { "type": "number" },
+        "amount_matched": { "type": "boolean" },
         "order_id": { "type": "string" },
         "orderID": { "type": "string" },
-        "trade_no": { "type": "string" }
+        "trade_no": { "type": "string" },
+        "time": { "type": "string" }
       }
     }
   }

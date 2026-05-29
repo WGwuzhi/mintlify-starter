@@ -1,0 +1,159 @@
+---
+title: "存储和路由"
+description: "使用默认存储、命名 bucket，并在 JavaScript 插件中处理 HTTP 路由请求。"
+icon: "database"
+---
+
+用存储保存插件状态；用 HTTP 路由把插件变成一个简单处理函数。路由声明写在 manifest headers 中，存储函数直接从 `middleware.js` 导入。
+
+## 默认存储
+
+默认存储使用全局 bucket `otto`，适合保存少量插件状态。
+
+```js
+const { get, set, del } = require('./middleware.js')
+
+await set('last_user', '10001')
+const user = await get('last_user')
+await del('last_user')
+```
+
+| 函数 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `get(key)` | 读取默认存储。 | `key`：必填。 | `Promise<string>`；不存在返回空字符串。 |
+| `set(key, value)` | 写入默认存储。 | `key`：必填；`value`：必填，会按字符串保存。 | `Promise<boolean>` |
+| `del(key)` | 删除默认存储键。 | `key`：必填。 | `Promise<boolean>` |
+
+<Warning>
+  存储值会按字符串保存。保存对象时先 `JSON.stringify(...)`，读取后再 `JSON.parse(...)`。
+</Warning>
+
+## bucket 名称规则
+
+`bucket` 是存储命名空间。名称里的 `.` 表示子级 bucket，例如 `shop.orders` 表示 `shop` 下的 `orders`。运行时最多允许 3 级 bucket，推荐你也最多使用 3 级，避免权限配置、数据迁移和排查问题时层级过深。
+
+<ParamField path="bucket" type="string" required>
+  bucket 名称。不能为空；用 `.` 分隔层级；每一段都不能为空；最多 3 级。示例：`my_plugin`、`my_plugin.users`、`my_plugin.orders.paid`。
+</ParamField>
+
+<Tip>
+  推荐用 `插件名.业务域.状态` 命名，例如 `card_claim.users`、`card_claim.inventory.active`。如果只是小插件，使用一级 bucket，例如 `my_plugin`。
+</Tip>
+
+| bucket 名称 | 级别 | 建议 | 说明 |
+|---|---:|---|---|
+| `my_plugin` | 1 | 推荐 | 适合简单配置和少量状态。 |
+| `my_plugin.users` | 2 | 推荐 | 适合按业务域拆分用户、订单、缓存。 |
+| `my_plugin.orders.paid` | 3 | 可用 | 已到推荐上限，适合确实需要细分的状态。 |
+| `my_plugin.orders.paid.2026` | 4 | 不可用 | 超过运行时最大层级。 |
+| `my_plugin..users` | 无效 | 不可用 | 中间段为空。 |
+
+<Warning>
+  不要把 `.` 当作普通字符放进同一级名称里。`a.b` 会被解释为两级 bucket，而不是一个名为 `a.b` 的单级 bucket。
+</Warning>
+
+## 命名 bucket
+
+命名 bucket 适合把插件状态按插件名或业务域隔离。bucket 负责隔离命名空间，`key` 负责定位具体记录。
+
+```js
+const { bucketGet, bucketSet, bucketAllKeys, bucketAll } = require('./middleware.js')
+
+const config = { enabled: true, limit: 10 }
+await bucketSet('my_plugin.config', 'runtime', JSON.stringify(config))
+await bucketSet('my_plugin.users', '10001', JSON.stringify({ claimed: true }))
+
+const raw = await bucketGet('my_plugin.config', 'runtime')
+const parsed = raw ? JSON.parse(raw) : {}
+
+const keys = await bucketAllKeys('my_plugin.users')
+const all = await bucketAll('my_plugin.users')
+```
+
+| 函数 / Sender 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `bucketGet(bucket, key)` | 读取指定 bucket 的键。 | `bucket`：必填，支持 `.` 子级，最多 3 级；`key`：必填。 | `Promise<string>`；不存在返回空字符串。 |
+| `bucketSet(bucket, key, value)` | 写入指定 bucket。 | `bucket`：必填，支持 `.` 子级，最多 3 级；`key`：必填；`value`：必填，按字符串保存。 | `Promise<boolean>` |
+| `bucketDel(bucket, key)` | 删除指定 bucket 的键。 | `bucket`：必填，支持 `.` 子级，最多 3 级；`key`：必填。 | `Promise<boolean>` |
+| `bucketKeys(bucket?, value?)` | 获取指定 bucket 中值等于 `value` 的 keys；不传 `value` 时返回全部 keys。 | `bucket`：可选，省略时为 `otto`；`value`：可选。 | `Promise<string[]>` |
+| `bucketAllKeys(bucket)` | 获取指定 bucket 的全部 keys。 | `bucket`：必填。 | `Promise<string[]>` |
+| `bucketAll(bucket)` | 获取指定 bucket 的全部键值。 | `bucket`：必填。 | `Promise<Record<string, string>>` |
+
+`Sender` 实例也提供同名 bucket 方法，会额外携带当前 `senderid`，适合需要由权限系统按当前运行检查 bucket 访问的场景。
+
+```js
+await sender.bucketSet('my_plugin.users', 'user:' + await sender.getUserID(), 'seen')
+```
+
+## HTTP 路由请求
+
+在 manifest 中声明 `router` 和 `method` 后，脚本可以读取 HTTP 请求并返回响应。Header 声明见 [`Plugin manifest headers`](/cn/plugin-sdk/manifest)。
+
+```js
+//[author: your-name]
+//[runtime: node@22.22.1]
+//[router: /demo/{id}]
+//[method: post]
+const { Sender, getSenderID } = require('./middleware.js')
+
+async function main() {
+  const sender = new Sender(getSenderID())
+  const params = await sender.getRouterParams()
+  const body = await sender.getRouterBody()
+  await sender.response({ ok: true, id: params.id, body })
+}
+
+main().catch(console.error)
+```
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `getRouterPath()` / `getRouter()` | 获取当前路由路径。 | 无 | `Promise<string>` |
+| `getRouterParams()` | 获取路径参数，例如 `{ id: '42' }`。 | 无 | `Promise<Record<string, string>>` |
+| `getRouterMethod()` / `getMethod()` | 获取请求方法。 | 无 | `Promise<string>` |
+| `getRouterHeaders()` | 获取请求头。 | 无 | `Promise<Record<string, string or string[]>>` |
+| `getRouterCookies()` | 获取 Cookie。 | 无 | `Promise<Record<string, string>>` |
+| `getRouterBody()` | 获取解析后的请求体；没有请求体时返回 `{}`。 | 无 | `Promise<any>` |
+| `getRouterData()` | 获取请求体 JSON 字符串。 | 无 | `Promise<string>` |
+| `response(data)` | 设置 HTTP 响应数据。 | `data`：必填，任意 JSON-like 数据。 | `Promise<boolean>` |
+
+<ParamField path="data" type="unknown" required>
+  `response(data)` 的响应体。可以是对象、数组、字符串、数字或布尔值。
+</ParamField>
+
+`response(...)` 的实际响应示例：
+
+```json
+{
+  "ok": true,
+  "id": "42",
+  "body": {
+    "name": "demo"
+  }
+}
+```
+
+<Note>
+  路由运行中调用 `reply('text')` 或 `replyMarkdown('...')` 也会写入 `response_data`，适合返回纯文本；需要返回对象时用 `response(data)`。
+</Note>
+
+## 顶层路由别名
+
+`middleware.js` 还导出默认 `Sender` 绑定的路由读取别名：
+
+| 函数 | 等价方法 |
+|---|---|
+| `getRouter()` | `new Sender(getSenderID()).getRouterPath()` |
+| `getMethod()` | `new Sender(getSenderID()).getRouterMethod()` |
+| `getRouterData()` | `new Sender(getSenderID()).getRouterData()` |
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="Manifest headers" icon="file-code" href="/cn/plugin-sdk/manifest">
+    查看 `router`、`method`、`param` 和 `dependency` 声明。
+  </Card>
+  <Card title="工具和依赖" icon="wrench" href="/cn/plugin-sdk/javascript/tools-cron-group">
+    查看 `importModule(...)` 和系统工具函数。
+  </Card>
+</CardGroup>

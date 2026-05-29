@@ -1,0 +1,168 @@
+---
+title: "Sender 消息能力"
+description: "读取消息上下文、回复文本和媒体、撤回消息和发送 mixed 消息。"
+icon: "message-circle"
+---
+
+`Sender` 绑定当前运行上下文。消息触发时，它代表当前 IM、账号、会话和用户；路由触发时，它代表当前 HTTP 请求；cron / fake 上下文不指向真实 IM 会话。
+
+```js
+const { Sender, getSenderID } = require('./middleware.js')
+const sender = new Sender(getSenderID())
+```
+
+## 读取消息上下文
+
+这些方法不传参数，返回当前运行上下文中的字段；不存在时通常返回空字符串、空数组或 `false`。
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `getImtype()` | 获取当前 IM 类型。cron 运行返回 `fake`。 | 无 | `Promise<string>` |
+| `getUserID()` | 获取当前用户 ID。 | 无 | `Promise<string>` |
+| `getUserName()` | 获取当前用户昵称。 | 无 | `Promise<string>` |
+| `getUserAvatarUrl()` | 获取当前用户头像 URL。 | 无 | `Promise<string>` |
+| `getChatID()` | 获取当前会话 ID；群聊为群 ID，私聊通常为空。 | 无 | `Promise<string>` |
+| `getChatName()` | 获取当前会话名称。 | 无 | `Promise<string>` |
+| `getGroupName()` | 获取群名，等同于 `getChatName()`。 | 无 | `Promise<string>` |
+| `isAdmin()` | 判断当前用户是否为管理员。 | 无 | `Promise<boolean>` |
+| `isAI()` | 判断当前消息是否来自 AI 触发上下文。 | 无 | `Promise<boolean>` |
+| `getAIParam()` | 获取 AI 参数。 | 无 | `Promise<string>` |
+| `getMessage()` | 获取当前消息文本。 | 无 | `Promise<string>` |
+| `getMessageID()` | 获取当前消息 ID。 | 无 | `Promise<string>` |
+| `getHistoryMessageIDs(number)` | 获取最近消息 ID。 | `number`：必填，期望数量。 | `Promise<string[]>` |
+| `param(index)` | 读取 `rule` 正则捕获。 | `index`：必填，从 `1` 开始；越界返回空字符串。 | `Promise<string>` |
+
+```js
+const user = await sender.getUserName()
+const message = await sender.getMessage()
+const firstMatch = await sender.param(1)
+await sender.reply(`${user} 发送了：${message}\n参数：${firstMatch}`)
+```
+
+## 回复文本和媒体
+
+`reply*` 方法用于回复当前运行上下文：消息触发时回复当前会话；路由触发时 `reply(...)` / `replyMarkdown(...)` 写入路由响应；cron 的 `fake` 上下文不会发送真实 IM 回复。
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `reply(text)` | 回复普通文本。 | `text`：必填，文本内容。 | `Promise<SendReceipt>` |
+| `replyMarkdown(markdown)` | 回复 Markdown 文本。是否按 Markdown 渲染取决于适配器。 | `markdown`：必填，Markdown 内容。 | `Promise<SendReceipt>` |
+| `replyImage(source, options?)` | 回复图片。 | `source`：必填，图片 URL、路径、base64 或 data URI；`options`：可选媒体选项。 | `Promise<SendReceipt>` |
+| `replyVoice(source, options?)` | 回复语音。 | `source`：必填，语音 URL 或路径；`options`：可选。 | `Promise<SendReceipt>` |
+| `replyVideo(source, options?)` | 回复视频。 | `source`：必填，视频 URL 或路径；`options`：可选。 | `Promise<SendReceipt>` |
+| `replyFile(source, options?)` | 回复文件。 | `source`：必填，文件 URL 或路径；`options`：可选。 | `Promise<SendReceipt>` |
+| `replyMixed(items, options?)` | 回复结构化混合消息。 | `items`：必填，mixed items；`options`：可选，会作为媒体项默认选项。 | `Promise<SendReceipt>` |
+| `returnValue(text)` | 设置运行返回值，不直接发送 IM 消息。 | `text`：必填，返回文本。 | `Promise<string>`，当前兼容返回通常是 `"[]"`。 |
+
+```js
+await sender.reply('普通文本')
+await sender.replyMarkdown('## 处理结果\n\n- 已完成')
+await sender.replyImage('https://example.com/a.png')
+await sender.replyVoice('./voice.wav')
+await sender.replyVideo('./demo.mp4')
+await sender.replyFile('./report.csv', { filename: 'report.csv', mimeType: 'text/csv' })
+await sender.replyMixed([
+  { type: 'text', text: '结果：' },
+  { type: 'image', source: './result.png', name: 'result.png' },
+])
+```
+
+<Note>
+  `replyImage(...)` 等回复当前会话的方法不需要你传 `imType`、群号或用户 ID。需要指定目标时，用 [`push(...)`](/cn/plugin-sdk/javascript/push) 或 `push*`。
+</Note>
+
+## `MediaOptions`
+
+媒体回复方法的第二个参数是可选对象。
+
+<ParamField path="options.filename" type="string">
+  文件展示名。也可写作 `fileName` 或 `file_name`。运行时会标准化为媒体项的 `name`。
+</ParamField>
+
+<ParamField path="options.mimeType" type="string">
+  MIME 类型。也可写作 `mime_type`，例如 `image/png`、`video/mp4`、`text/csv`。
+</ParamField>
+
+<ParamField path="options.constraints" type="object">
+  传给媒体准备流程的约束。仅在需要限制输出格式或大小时使用。
+</ParamField>
+
+<ParamField path="options.options" type="object">
+  传给媒体准备流程的扩展选项。普通插件通常不用设置。
+</ParamField>
+
+<ParamField path="options.timeout" type="number">
+  预留超时字段。当前直接回复媒体的 helper 使用内置媒体超时。
+</ParamField>
+
+## `replyMixed(items, options?)`
+
+`items` 是数组。文本项使用 `text`；媒体项使用 `source`，也可用 `file`、`url` 或 `path` 作为来源别名。运行时会丢弃不合法的 mixed item。
+
+<ParamField path="items" type="MediaItem[]" required>
+  混合消息数组。支持 `text`、`markdown`、`image`、`voice`、`video`、`file`。运行时标准化后传给适配器。
+</ParamField>
+
+<ParamField path="options" type="MediaOptions">
+  可选默认媒体选项。媒体项没有 `name` / `mime_type` 时，可从这里补充。
+</ParamField>
+
+```js
+await sender.replyMixed([
+  { type: 'text', text: '处理完成：' },
+  { type: 'image', source: './result.png', name: 'result.png' },
+  { type: 'file', source: './report.csv', name: 'report.csv', mime_type: 'text/csv' },
+])
+```
+
+支持的 item：
+
+| item | 必填字段 | 可选字段 | 说明 |
+|---|---|---|---|
+| `{ type: 'text', text: '...' }` | `text` | 无 | 发送普通文本片段。 |
+| `{ type: 'markdown', text: '...' }` | `text` | 无 | helper 会原样传入；当前运行时标准化主要接收文本和媒体项，适配器是否支持取决于具体实现。 |
+| `{ type: 'image', source: '...' }` | `source` | `name`、`mime_type`、`platform_payload` | 发送图片。 |
+| `{ type: 'voice', source: '...' }` | `source` | `name`、`mime_type`、`platform_payload` | 发送语音。 |
+| `{ type: 'video', source: '...' }` | `source` | `name`、`mime_type`、`platform_payload` | 发送视频。 |
+| `{ type: 'file', source: '...' }` | `source` | `name`、`mime_type`、`platform_payload` | 发送文件。 |
+
+返回 `SendReceipt` 示例：
+
+```json
+{
+  "ok": true,
+  "message_id": "msg_mixed_123",
+  "message_ids": ["msg_text_1", "msg_image_1"],
+  "action": "sendMixed"
+}
+```
+
+## 控制流程
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `setContinue()` | 允许继续匹配后续插件。默认命中插件后通常会停止后续匹配。 | 无 | `Promise<boolean>` |
+| `recallMessage(messageid)` | 撤回指定消息。 | `messageid`：必填，消息 ID，可用 `message_id` 或 `messageid`。 | `Promise<SendReceipt>` |
+| `breakIn(content)` | 把新文本作为消息事件重新送入 autClaw 内部处理。 | `content`：必填，新消息文本。 | `Promise<boolean>` |
+
+```js
+if (await sender.isAdmin()) {
+  await sender.setContinue()
+}
+
+const receipt = await sender.reply('这条消息 5 秒后撤回')
+setTimeout(() => {
+  sender.recallMessage(receipt.message_id || receipt.messageid).catch(console.error)
+}, 5000)
+```
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="等待输入和支付" icon="hourglass" href="/cn/plugin-sdk/javascript/wait-and-payment">
+    查看 `listen(...)`、`input(...)` 和 `waitPay(...)`。
+  </Card>
+  <Card title="用户上传文件" icon="file-down" href="/cn/plugin-sdk/javascript/media-files">
+    查看 `getMediaItems()` 与 `downloadAdapterFile(...)`。
+  </Card>
+</CardGroup>

@@ -1,0 +1,168 @@
+---
+title: "Sender message capabilities"
+description: "Read message context, reply with text and media, recall messages, and send mixed messages."
+icon: "message-circle"
+---
+
+`Sender` binds to the current runtime context. For a message trigger, it represents the current IM, account, chat, and user. For a route trigger, it represents the current HTTP request. A cron / fake context does not point to a real IM chat.
+
+```js
+const { Sender, getSenderID } = require('./middleware.js')
+const sender = new Sender(getSenderID())
+```
+
+## Read message context
+
+These methods take no parameters and return fields from the current runtime context. When a field does not exist, they usually return an empty string, empty array, or `false`.
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `getImtype()` | Get the current IM type. Cron runs return `fake`. | None | `Promise<string>` |
+| `getUserID()` | Get the current user ID. | None | `Promise<string>` |
+| `getUserName()` | Get the current user display name. | None | `Promise<string>` |
+| `getUserAvatarUrl()` | Get the current user avatar URL. | None | `Promise<string>` |
+| `getChatID()` | Get the current chat ID. For groups this is the group ID; for private chats it is usually empty. | None | `Promise<string>` |
+| `getChatName()` | Get the current chat name. | None | `Promise<string>` |
+| `getGroupName()` | Get the group name. Same as `getChatName()`. | None | `Promise<string>` |
+| `isAdmin()` | Check whether the current user is an administrator. | None | `Promise<boolean>` |
+| `isAI()` | Check whether the current message came from an AI trigger context. | None | `Promise<boolean>` |
+| `getAIParam()` | Get the AI parameter. | None | `Promise<string>` |
+| `getMessage()` | Get the current message text. | None | `Promise<string>` |
+| `getMessageID()` | Get the current message ID. | None | `Promise<string>` |
+| `getHistoryMessageIDs(number)` | Get recent message IDs. | `number`: required, expected count. | `Promise<string[]>` |
+| `param(index)` | Read a `rule` regex capture. | `index`: required, starts at `1`; out-of-range returns an empty string. | `Promise<string>` |
+
+```js
+const user = await sender.getUserName()
+const message = await sender.getMessage()
+const firstMatch = await sender.param(1)
+await sender.reply(`${user} sent: ${message}\nParameter: ${firstMatch}`)
+```
+
+## Reply with text and media
+
+`reply*` methods reply to the current runtime context: for a message trigger, they reply to the current chat; for a route trigger, `reply(...)` / `replyMarkdown(...)` writes the route response; the `fake` context for cron does not send a real IM reply.
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `reply(text)` | Reply with plain text. | `text`: required text content. | `Promise<SendReceipt>` |
+| `replyMarkdown(markdown)` | Reply with Markdown text. Whether Markdown is rendered depends on adapter support. | `markdown`: required Markdown content. | `Promise<SendReceipt>` |
+| `replyImage(source, options?)` | Reply with an image. | `source`: required image URL, path, base64, or data URI; `options`: optional media options. | `Promise<SendReceipt>` |
+| `replyVoice(source, options?)` | Reply with voice/audio. | `source`: required voice URL or path; `options`: optional. | `Promise<SendReceipt>` |
+| `replyVideo(source, options?)` | Reply with a video. | `source`: required video URL or path; `options`: optional. | `Promise<SendReceipt>` |
+| `replyFile(source, options?)` | Reply with a file. | `source`: required file URL or path; `options`: optional. | `Promise<SendReceipt>` |
+| `replyMixed(items, options?)` | Reply with a structured mixed message. | `items`: required mixed items; `options`: optional and used as default options for media items. | `Promise<SendReceipt>` |
+| `returnValue(text)` | Set the runtime return value without directly sending an IM message. | `text`: required return text. | `Promise<string>`, currently usually returns `"[]"` for compatibility. |
+
+```js
+await sender.reply('Plain text')
+await sender.replyMarkdown('## Result\n\n- Done')
+await sender.replyImage('https://example.com/a.png')
+await sender.replyVoice('./voice.wav')
+await sender.replyVideo('./demo.mp4')
+await sender.replyFile('./report.csv', { filename: 'report.csv', mimeType: 'text/csv' })
+await sender.replyMixed([
+  { type: 'text', text: 'Result: ' },
+  { type: 'image', source: './result.png', name: 'result.png' },
+])
+```
+
+<Note>
+  Current-chat reply methods such as `replyImage(...)` do not require you to pass `imType`, group ID, or user ID. To specify a target, use [`push(...)`](/en/plugin-sdk/javascript/push) or `push*`.
+</Note>
+
+## `MediaOptions`
+
+The second parameter of media reply methods is an optional object.
+
+<ParamField path="options.filename" type="string">
+  File display name. You can also write `fileName` or `file_name`. The runtime normalizes it to media item `name`.
+</ParamField>
+
+<ParamField path="options.mimeType" type="string">
+  MIME type. You can also write `mime_type`, such as `image/png`, `video/mp4`, or `text/csv`.
+</ParamField>
+
+<ParamField path="options.constraints" type="object">
+  Constraints passed to the media preparation flow. Use only when you need to limit output format or size.
+</ParamField>
+
+<ParamField path="options.options" type="object">
+  Extension options passed to the media preparation flow. Regular plugins usually do not need this.
+</ParamField>
+
+<ParamField path="options.timeout" type="number">
+  Reserved timeout field. Current direct media reply helpers use the built-in media timeout.
+</ParamField>
+
+## `replyMixed(items, options?)`
+
+`items` is an array. Text items use `text`; media items use `source`, and can also use `file`, `url`, or `path` as source aliases. The runtime discards invalid mixed items.
+
+<ParamField path="items" type="MediaItem[]" required>
+  Mixed message array. Supports `text`, `markdown`, `image`, `voice`, `video`, and `file`. The runtime normalizes it before passing it to the adapter.
+</ParamField>
+
+<ParamField path="options" type="MediaOptions">
+  Optional default media options. When a media item has no `name` / `mime_type`, values can be filled from here.
+</ParamField>
+
+```js
+await sender.replyMixed([
+  { type: 'text', text: 'Done: ' },
+  { type: 'image', source: './result.png', name: 'result.png' },
+  { type: 'file', source: './report.csv', name: 'report.csv', mime_type: 'text/csv' },
+])
+```
+
+Supported items:
+
+| item | Required field | Optional fields | Description |
+|---|---|---|---|
+| `{ type: 'text', text: '...' }` | `text` | None | Send a plain text segment. |
+| `{ type: 'markdown', text: '...' }` | `text` | None | The helper passes it through. The current runtime normalization mainly accepts text and media items; adapter support depends on the implementation. |
+| `{ type: 'image', source: '...' }` | `source` | `name`, `mime_type`, `platform_payload` | Send an image. |
+| `{ type: 'voice', source: '...' }` | `source` | `name`, `mime_type`, `platform_payload` | Send voice/audio. |
+| `{ type: 'video', source: '...' }` | `source` | `name`, `mime_type`, `platform_payload` | Send a video. |
+| `{ type: 'file', source: '...' }` | `source` | `name`, `mime_type`, `platform_payload` | Send a file. |
+
+Example `SendReceipt`:
+
+```json
+{
+  "ok": true,
+  "message_id": "msg_mixed_123",
+  "message_ids": ["msg_text_1", "msg_image_1"],
+  "action": "sendMixed"
+}
+```
+
+## Control flow
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `setContinue()` | Continue matching subsequent plugins. After a plugin is hit, later matches usually stop by default. | None | `Promise<boolean>` |
+| `recallMessage(messageid)` | Recall the specified message. | `messageid`: required message ID. You can use `message_id` or `messageid`. | `Promise<SendReceipt>` |
+| `breakIn(content)` | Re-enter autClaw internal message handling with new text as a message event. | `content`: required new message text. | `Promise<boolean>` |
+
+```js
+if (await sender.isAdmin()) {
+  await sender.setContinue()
+}
+
+const receipt = await sender.reply('This message will be recalled in 5 seconds')
+setTimeout(() => {
+  sender.recallMessage(receipt.message_id || receipt.messageid).catch(console.error)
+}, 5000)
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Wait for input and payment" icon="hourglass" href="/en/plugin-sdk/javascript/wait-and-payment">
+    See `listen(...)`, `input(...)`, and `waitPay(...)`.
+  </Card>
+  <Card title="User-uploaded files" icon="file-down" href="/en/plugin-sdk/javascript/media-files">
+    See `getMediaItems()` and `downloadAdapterFile(...)`.
+  </Card>
+</CardGroup>

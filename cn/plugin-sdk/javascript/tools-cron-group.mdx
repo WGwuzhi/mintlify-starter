@@ -1,0 +1,205 @@
+---
+title: "工具、Cron 和群管理"
+description: "使用 importModule、importJs、系统工具函数、运行时 Cron 和群管理方法。"
+icon: "wrench"
+---
+
+本页覆盖 `middleware.js` 的工具函数、跨文件引用、运行时定时指令和群管理方法。公开插件应优先使用明确列出的函数，不要依赖未公开内部动作。
+
+## `importModule(module, versionOrOptions?, manager?)`
+
+确保 npm 依赖可用，然后返回 `require(module)` 的结果。
+
+<ParamField path="module" type="string" required>
+  `require(...)` 使用的模块名。
+</ParamField>
+
+<ParamField path="versionOrOptions" type="string | object">
+  字符串表示版本号。对象可包含 `package`、`version`、`manager`。
+</ParamField>
+
+<ParamField path="versionOrOptions.package" type="string">
+  真实包名。包名与导入名不一致时使用，例如导入子路径或别名包。
+</ParamField>
+
+<ParamField path="versionOrOptions.version" type="string">
+  需要安装的版本。
+</ParamField>
+
+<ParamField path="versionOrOptions.manager" type="string">
+  包管理器名称。通常不用传，默认由运行时处理。
+</ParamField>
+
+```js
+const { importModule } = require('./middleware.js')
+
+const dayjs = await importModule('dayjs')
+const lodash = await importModule('lodash', '4.17.21')
+const axios = await importModule('axios', {
+  package: 'axios',
+  version: '1.7.9',
+  manager: 'npm',
+})
+```
+
+如果导入路径不是 npm 包名，必须用 `package` 指定真实包名：
+
+```js
+const { nanoid } = await importModule('nanoid/non-secure', {
+  package: 'nanoid',
+  version: '5.0.7',
+})
+```
+
+### 会发生什么
+
+1. `importModule(...)` 会先检查 `module` 是否为空；为空会抛出 `module is required`。
+2. 它会向运行时发送 `/dependencyEnsure` 请求，最多等待 `10` 分钟。
+3. 运行时按当前插件的 runtime 和 profile 确保依赖可用；未安装时会安装到运行时依赖目录，例如 Docker 默认的 `/opt/autclaw/envs/packages`。
+4. 如果传了字符串第二参数，例如 `'4.17.21'`，它会作为 `version`。
+5. 如果传了对象，`package` 是要安装的包名，`version` 是版本，`manager` 是包管理器；JavaScript 依赖通常用 `npm`，不传时由运行时推断。
+6. 依赖确保完成后，`importModule(...)` 执行 `require(module)`，并返回该模块的导出对象。
+
+<Warning>
+  `importModule(...)` 不是本地文件导入工具。导入当前插件文件用 `require('./file.js')`；跨插件复用 helper 用 [`importJs(...)`](#importjstarget)。
+</Warning>
+
+<Tip>
+  固定依赖优先写到 manifest 的 `dependency` 中；`importModule(...)` 适合按需加载、动态版本或兼容旧插件。不要在高频循环里反复调用它，建议在插件入口处导入一次后复用。
+</Tip>
+
+## `importJs(target)`
+
+`importJs(...)` 是 ES5 / JavaScript 运行时提供的全局函数，用来引用插件工作区里的其他 `.js` 文件，或引用另一个同族 JavaScript 插件里的文件。它最终返回目标文件的 `module.exports`，效果接近 `require(resolvedPath)`。
+
+```js
+// 引用当前插件工作区里的 hook.js。
+const hook = importJs('hook')
+
+// 引用另一个插件里的 hook.js。
+const marketHook = importJs('specter:hook.js')
+```
+
+### `target` 格式
+
+| 写法 | 含义 |
+|---|---|
+| `importJs('hook')` | 在当前运行工作区查找 `hook.js`。没有扩展名时自动补 `.js`。 |
+| `importJs('lib/tool.js')` | 在当前运行工作区查找 `lib/tool.js`。 |
+| `importJs('specter:hook.js')` | 跨插件引用：冒号前是目标插件命名空间，冒号后是目标插件内文件路径。 |
+| `require('specter:hook.js')` | Node.js / JavaScript 运行时也会把这种 scoped request 归一到工作区内的目标文件。 |
+
+`source_script_id` / 命名空间匹配规则：
+
+- 冒号前的 `specter` 不是文件夹名。运行时会用它匹配目标插件的作者、插件名、市场作者、插件 ID 前缀，以及市场源脚本 ID（`source_script_id`）前缀。
+- 对市场插件，`source_script_id` 通常类似 `specter:hook`。运行时会取冒号前缀 `specter` 参与匹配，所以 `importJs('specter:hook.js')` 可以定位到该来源的插件。
+- 如果市场插件和本地插件都匹配同一命名空间，优先使用市场插件；没有市场匹配时再使用本地插件。
+
+### 文件解析行为
+
+- 冒号后的路径是目标插件内的文件路径；例如 `specter:lib/hook` 会解析为目标插件里的 `lib/hook.js`。
+- 没有扩展名时自动补 `.js`。
+- 目标文件会被复制到当前运行工作区，运行时只从工作区内加载。
+- 禁止跳出工作区；例如解析后位于工作区外会报 `importJs target is outside runtime workspace`。
+- 目标不存在会报 `importJs target not found`；跨插件依赖如果没有匹配到命名空间，会按当前工作区普通文件继续解析，仍找不到时再报 not found。
+- 只允许同运行时家族互引：`es5` 只能引用 `es5`；`nodejs` / `typescript` 可以互引；不能跨到 Python 或其他运行时。
+- 如果命名空间匹配到了插件，但运行时家族不兼容，会直接报 runtime mismatch，不会自动降级混用。
+
+<Warning>
+  `importJs(...)` 适合复用公共 helper。不要用它读取用户数据、日志、数据库或密钥文件；也不要依赖未公开插件的内部文件结构。
+</Warning>
+
+## 系统和实用函数
+
+| 函数 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `render(template, selector, data)` | 渲染 HTML / template，常用于生成图片。当前运行时可能返回空结果，按部署能力为准。 | `template`：模板代码；`selector`：选择器；`data`：模板数据。 | `Promise<any>` |
+| `getActiveImtypes()` | 获取当前启用的 IM 类型。 | 无 | `Promise<string[]>` |
+| `name()` | 获取机器人名称。 | 无 | `Promise<string>` |
+| `domain()` | 获取本机运行时域名，通常是 `http://127.0.0.1:<port>`。 | 无 | `Promise<string>` |
+| `port()` | 获取 autClaw 服务端口。 | 无 | `Promise<string or number>` |
+| `machineId()` | 获取机器 ID。 | 无 | `Promise<string>` |
+| `version()` | 获取 autClaw 版本。 | 无 | `Promise<string>` |
+| `versionInfo()` | 获取结构化版本信息。 | 无 | `Promise<object>` |
+| `notifyMasters(content, imtypes?)` | 给管理员发送通知。 | `content`：必填；`imtypes`：可选 IM 类型数组。 | `Promise<number>`，发送数量。 |
+| `coffee()` | 获取咖啡码激活状态。 | 无 | `Promise<boolean>` |
+| `spread(msg)` | 兼容旧插件的推广转链入口；未配置相关能力时返回空字符串。 | `msg`：必填。 | `Promise<string>` |
+| `getHistoryMessages(imtype?)` | 获取最近历史消息。 | `imtype`：可选 IM 类型。 | `Promise<any[]>` |
+| `generateFromSinglePrompt(prompt)` | 兼容旧插件的单 prompt 生成入口；当前运行时可能返回空字符串。 | `prompt`：必填。 | `Promise<string>` |
+| `accessService(path, body?, timeout?)` | 调用运行时兼容接口。 | `path`：必填内部动作路径；`body`：可选；`timeout`：可选毫秒。 | `Promise<any>` |
+
+<Warning>
+  `accessService(...)` 是底层兼容入口。公开插件应优先使用本页明确列出的方法，避免依赖未公开的内部动作。
+</Warning>
+
+## `Cron`
+
+`Cron` 管理运行时定时指令。它不同于 manifest 顶部的 `cron`：
+
+- `//[cron: ...]`：让当前插件按固定表达式自触发。
+- `new Cron()`：在插件运行期间动态增删改查运行时定时指令。
+
+```js
+const { Cron } = require('./middleware.js')
+
+const cron = new Cron()
+const items = await cron.getCrons()
+cron.addCron('0 9 * * *', false, 'daily reminder', true, null, '每日提醒')
+
+console.log(items)
+```
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `getCrons()` | 获取当前运行创建的定时指令列表。 | 无 | `Promise<RuntimeCronItem[]>` |
+| `getCron(id)` | 当前 helper 会请求运行时 cron 列表并带上 `id`；实际运行时返回当前 run 的列表。 | `id`：定时指令 ID。 | `Promise<RuntimeCronItem[]>` |
+| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | 添加运行时定时指令。 | `cron`：必填 cron 表达式；`cmd`：必填触发命令；其余字段为兼容旧签名。 | 当前 JS helper 发起请求但不返回结果。 |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 更新运行时定时指令。 | `id`、`cron`、`cmd` 必填；其余兼容旧签名。 | 当前 JS helper 发起请求但不返回结果。 |
+| `delCron(id)` | 删除运行时定时指令。 | `id`：必填。 | 当前 JS helper 发起请求但不返回结果。 |
+
+`RuntimeCronItem` 示例：
+
+```json
+{
+  "id": "runtime_1",
+  "cron": "0 9 * * *",
+  "cmd": "daily reminder",
+  "memo": "每日提醒",
+  "source": "runtime_api",
+  "next_run_at": "2026-05-29T09:00:00+08:00"
+}
+```
+
+<Note>
+  运行时 cron 触发的新运行来源是 `runtime_api`，参数里会包含 `runtime_cron_id` 和 `cmd`。如果只是固定定时执行当前插件，优先使用 manifest 的 `cron`。
+</Note>
+
+## 群管理
+
+这些方法依赖当前 IM 适配器支持情况。不支持时可能返回错误或无效果。当前 JS helper 发起请求但不返回 Promise；如果你需要确认结果，应使用适配器明确支持的接口或等待后续 SDK 改进。
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `groupInviteIn(friend, group)` | 邀请好友入群。 | `friend`：必填，好友 ID；`group`：必填，群 ID。 | `void` |
+| `groupKick(userid)` | 踢出群成员。 | `userid`：必填，用户 ID。 | `void` |
+| `groupBan(userid, timeout)` | 禁言群成员。 | `userid`：必填，用户 ID；`timeout`：必填，禁言秒数或适配器要求的单位。 | `void` |
+| `groupUnban(userid)` | 解除禁言。 | `userid`：必填，用户 ID。 | `void` |
+| `groupWholeBan()` | 开启全员禁言。 | 无 | `void` |
+| `groupWholeUnban()` | 关闭全员禁言。 | 无 | `void` |
+| `groupNoticeSend(notice)` | 发送群公告。 | `notice`：必填，公告内容。 | `void` |
+
+```js
+sender.groupBan('10001', 600)
+sender.groupNoticeSend('今晚 22:00 维护，请提前保存数据。')
+```
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="Manifest cron" icon="file-code" href="/cn/plugin-sdk/manifest">
+    查看固定定时触发如何声明。
+  </Card>
+  <Card title="主动推送" icon="send" href="/cn/plugin-sdk/javascript/push">
+    查看 cron / fake 上下文中的推送账号选择。
+  </Card>
+</CardGroup>
