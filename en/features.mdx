@@ -1,0 +1,131 @@
+---
+title: "autClaw feature overview"
+sidebarTitle: "Features"
+description: "Learn about autClaw's IM adapters, plugin SDK, runtime management, marketplace, payment, and Docker operations."
+keywords: ["autClaw features", "self-hosted bot", "plugin marketplace", "IM adapter", "plugin development"]
+icon: "sparkles"
+mode: "wide"
+---
+
+autClaw is a self-hosted automation bot and plugin runtime platform. After you deploy it on Linux or Docker, you can connect IM accounts in the web console, write plugins, install marketplace plugins, configure payments, and review runtime status.
+
+<Info>
+  Want to get running first? Follow [Deploy autClaw with Docker](/en/getting-started/deploy), then open `http://SERVER_IP:8200`.
+</Info>
+
+## Good fit for these scenarios
+
+<Columns cols={2}>
+  <Card title="Build multi-channel bots" icon="message-circle">
+    Connect QQ, WeChat, Qianxun, Feishu, and other adapters, then let plugins handle messages, notifications, requests, and payment events.
+  </Card>
+  <Card title="Turn scripts into plugins" icon="code-2">
+    Write automation flows in JavaScript, Python, or Go, and trigger them with `rule`, `event`, `router`, and `cron`.
+  </Card>
+  <Card title="Manage the plugin runtime" icon="terminal">
+    Install Node.js, Python, and Go runtimes in the console, then manage `npm`, `pip`, `go`, and other dependencies as needed.
+  </Card>
+  <Card title="Distribute and install plugins" icon="store">
+    Subscribe to authors, buy or install marketplace plugins, and let authors manage marketplace metadata, listings, and authorization.
+  </Card>
+  <Card title="Handle paid workflows" icon="wallet-cards">
+    Configure WeChat Pay, Alipay, or EasyPay, then let scripts wait for payment, record orders, and continue after success.
+  </Card>
+  <Card title="Maintain self-hosted instances" icon="activity">
+    Review CPU and memory graphs, hardware info, live logs, online update tasks, and restart status.
+  </Card>
+</Columns>
+
+## Core capabilities
+
+<Columns cols={2}>
+  <Card title="IM adapters and multiple accounts" icon="radio-receiver">
+    Manage account connections, default accounts, account status, and send/receive routing through Adapter Gateway. Adapters handle platform protocols, while autClaw handles message dispatch, script scheduling, and delivery receipts.
+  </Card>
+  <Card title="Local plugin editor" icon="file-code">
+    Create, save, start, stop, and debug plugins in “Local apps”. The editor reads the headers at the top of the file and generates menus, parameters, dependencies, scheduled tasks, and marketplace metadata.
+  </Card>
+  <Card title="Plugin SDK" icon="puzzle" href="/en/plugin-sdk/overview">
+    Use `Sender` to read message context, reply with text, Markdown, images, voice, video, files, or mixed messages. You can also wait for user input, recall messages, and manage groups.
+  </Card>
+  <Card title="Buckets and permissions" icon="database">
+    Store plugin settings, user progress, and cache in buckets. You can search, edit, rename, or delete data in data management, and restrict plugin access to sensitive buckets.
+  </Card>
+  <Card title="Runtime dependencies" icon="package">
+    Use `mise` to manage multiple versions of Node.js, Python, and Go. Use dependency management to install, check, reinstall, cancel, or uninstall plugin dependencies.
+  </Card>
+  <Card title="Live logs and debugging" icon="logs">
+    Review HTTP, plugin, adapter, dependency, and system event logs. Plugin debugging keeps sessions, messages, and execution records so you can reproduce issues.
+  </Card>
+</Columns>
+
+## What plugins can do
+
+| Capability | How you can use it |
+| --- | --- |
+| Message triggers | Use `rule` to match text and filter by `im_type`, user, or group. |
+| Event triggers | Use `event` to handle messages, notifications, requests, meta events, and payment events. |
+| HTTP routes | Use `router` and `method` to turn a plugin into an HTTP handler. |
+| Scheduled tasks | Use `cron` to run sync, reminder, check, or push tasks on a schedule. |
+| Parameter config | Use `param` to declare form fields with required, secret, boolean, option, and account-scoped settings. |
+| Dependency install | Use `dependency` to declare runtime dependencies and avoid installing packages manually in the container. |
+| Proactive push | Use `push`, `pushImage`, `pushFile`, and `pushMixed` to send content to a specific channel, group, or user. |
+| Media handling | Download user-uploaded files and send images, voice, video, files, and mixed messages. |
+
+<Tip>
+  For a new plugin, start with [Plugin SDK overview](/en/plugin-sdk/overview), then fill in triggers, parameters, and dependencies with [Manifest headers](/en/plugin-sdk/manifest).
+</Tip>
+
+## From deployment to daily use
+
+<Steps>
+  <Step title="Deploy the service">
+    Start autClaw with Docker and persist the data directory to `/opt/autclaw` or your NAS Docker path.
+  </Step>
+  <Step title="Finish initial setup">
+    Open the console, register an admin account, and follow the prompts to complete login, authorization checks, and machine-code binding.
+  </Step>
+  <Step title="Connect IM accounts">
+    Enable the platform adapter in “Adapter management”, configure account settings, scan a QR code or connect an external framework, and verify that the runtime status is healthy.
+  </Step>
+  <Step title="Install or write plugins">
+    Install plugins from the marketplace, or create scripts in “Local apps”. If you need third-party packages, install them in runtime and dependency management.
+  </Step>
+  <Step title="Observe and iterate">
+    Check resources, errors, and execution records in “System overview” and “Live logs”. After you edit a plugin, save it and trigger another test.
+  </Step>
+</Steps>
+
+## Operations and extensions
+
+<Columns cols={2}>
+  <Card title="Online updates" icon="refresh-cw" href="/en/getting-started/upgrade">
+    Trigger an update from the console or an IM channel while keeping user plugins, data, runtime files, and dependency folders.
+  </Card>
+  <Card title="Docker persistence" icon="hard-drive" href="/en/getting-started/runtime-paths">
+    Learn the default locations for `autMan.db`, `plugin/`, `dist/`, `envs/mise`, and `envs/packages`.
+  </Card>
+  <Card title="Image hosting" icon="images">
+    Upload and manage image assets for plugin messages, payment QR codes, diagrams, or temporary materials.
+  </Card>
+  <Card title="Open API" icon="key-round">
+    Create applications and secrets to issue access tokens for external systems, then read system status or user profiles.
+  </Card>
+  <Card title="Keyword replies" icon="message-square-reply">
+    Configure keyword rules without code for common Q&A, quick hints, and basic auto-replies.
+  </Card>
+  <Card title="Container integration" icon="boxes">
+    Test connections to QingLong, Daidai, and other container services so external automation environments can join the autClaw workflow.
+  </Card>
+</Columns>
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Deploy autClaw" icon="rocket" href="/en/getting-started/deploy" cta="Start deployment">
+    Prepare Docker and a persistent data directory, then open port `8200` after startup.
+  </Card>
+  <Card title="Write your first plugin" icon="puzzle" href="/en/plugin-sdk/overview" cta="View the SDK">
+    Choose JavaScript or Python, then read messages and reply with content.
+  </Card>
+</Columns>

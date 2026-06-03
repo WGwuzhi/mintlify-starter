@@ -30,6 +30,13 @@ autClaw plugins can read messages, reply with text or media, save configuration,
 
 ## Choose a language
 
+| Language | Best for | Typical entry |
+| --- | --- | --- |
+| JavaScript | npm ecosystem, async I/O, and frontend or Node.js experience | `middleware.js` |
+| Python | Data processing, script automation, and AI calls | `middleware.py` |
+
+Both languages can read messages, send replies, and save state. The main difference is your existing ecosystem and dependencies.
+
 <Tabs>
   <Tab title="JavaScript">
     Use JavaScript when you want npm packages, async I/O, or Node.js experience.
@@ -103,7 +110,7 @@ autClaw plugins can read messages, reply with text or media, save configuration,
   </Card>
 </CardGroup>
 
-## Plugin files and headers
+## Plugin files and declarations
 
 | Location | Description |
 |---|---|
@@ -111,7 +118,7 @@ autClaw plugins can read messages, reply with text or media, save configuration,
 | `plugin/scripts/*.py` | Regular Python plugins. |
 | `plugin/replies/*.js` | Legacy reply scripts. Keep using them only when maintaining existing plugins. |
 
-Minimum headers:
+Minimum declarations:
 
 ```js
 //[author: your-name]

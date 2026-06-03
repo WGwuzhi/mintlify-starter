@@ -41,7 +41,9 @@
                   "cn/features",
                   "cn/getting-started/deploy",
                   "cn/getting-started/upgrade",
-                  "cn/getting-started/runtime-paths"
+                  "cn/getting-started/runtime-paths",
+                  "cn/getting-started/faq",
+                  "cn/getting-started/comparison"
                 ],
                 "icon": "rocket"
               },
@@ -129,9 +131,12 @@
                 "group": "Getting started",
                 "pages": [
                   "en/index",
+                  "en/features",
                   "en/getting-started/deploy",
                   "en/getting-started/upgrade",
-                  "en/getting-started/runtime-paths"
+                  "en/getting-started/runtime-paths",
+                  "en/getting-started/faq",
+                  "en/getting-started/comparison"
                 ],
                 "icon": "rocket"
               },
@@ -277,7 +282,7 @@
       "destination": "/cn/plugin-sdk/:slug*"
     }
   ],
-  "description": "autClaw 文档：在 Linux、Docker、飞牛 OS 和群晖部署自托管机器人平台，管理运行目录和升级流程，并开发 JavaScript / Python 插件。",
+  "description": "autClaw 文档：自托管机器人与插件运行平台，支持 Linux / Docker / 飞牛 OS / 群晖部署，默认端口 8200，可用 JavaScript / Python 开发插件。",
   "seo": {
     "indexing": "navigable",
     "metatags": {
@@ -291,7 +296,7 @@
     }
   },
   "search": {
-    "prompt": "搜索 autClaw 部署、Docker 运维或插件 SDK..."
+    "prompt": "搜索部署、升级或插件 SDK..."
   },
   "metadata": {
     "timestamp": true

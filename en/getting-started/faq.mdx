@@ -1,0 +1,57 @@
+---
+title: "autClaw FAQ"
+sidebarTitle: "FAQ"
+description: "Answers to autClaw deployment, default ports, persistent directories, plugin languages, upgrades, and common limits."
+keywords: ["autClaw FAQ", "deployment questions", "persistent directory", "plugin language", "upgrade"]
+icon: "message-circle"
+---
+
+autClaw is a self-hosted bot and plugin runtime platform. This page answers the questions users ask most often.
+
+## Quick facts
+
+| Item | Fact |
+|---|---|
+| Default port | `8200` |
+| Default persistent directory | `/opt/autclaw` |
+| Plugin languages | JavaScript, Python |
+| Common triggers | `rule`, `event`, `router`, `cron` |
+| Official image | `nolan1121953/autclaw:latest` |
+| Common deployment environments | Linux, Feiniu OS (FNOS), Synology DSM |
+
+## Deployment method comparison
+
+| Scenario | Recommended method | Best for |
+|---|---|---|
+| Linux server | Docker bridge | VPS or bare-metal installs |
+| Feiniu OS (FNOS) | Docker + host directory | Feiniu OS NAS users |
+| Synology DSM | Docker + host directory | Synology NAS users |
+
+## Common questions
+
+### What is autClaw?
+autClaw is a self-hosted bot and plugin runtime platform. You can connect IM accounts, install plugins, and handle messages, payment events, HTTP routes, and scheduled tasks from the web console.
+
+### Does autClaw support Windows?
+No. The current docs target Linux and Docker deployments.
+
+### Where are the data and plugins stored by default?
+They all live under `/opt/autclaw`, including the database, `plugin/`, `dist/`, `envs/mise`, and `envs/packages`.
+
+### Should I start with JavaScript or Python plugins?
+JavaScript fits npm ecosystems and async I/O. Python fits data processing, script automation, and AI calls.
+
+### Which page should I read first?
+Start with [How to deploy autClaw with Docker](/en/getting-started/deploy), then read [runtime directories and paths](/en/getting-started/runtime-paths), and finish with [the plugin SDK overview](/en/plugin-sdk/overview).
+
+### What is the difference between autClaw and AstrBot?
+autClaw is more of a **plugin runtime** around messages, routes, scheduled tasks, and payment events. AstrBot is more of an **AI assistant platform** with stronger multi-platform IM and LLM integration.
+
+### What is the difference between autClaw and autMan (fanli)?
+autClaw is a general bot and plugin platform. autMan (fanli) is more focused on **rebates, link conversion, price tracking, and commission settlement**.
+
+### How do I upgrade?
+Use **System upgrade** in the web console first, or send `更新` / `update` from an admin IM channel.
+
+### Can I change the port?
+Yes. Change `-p 8200:8200` to the host port you want, such as `-p 18200:8200`.

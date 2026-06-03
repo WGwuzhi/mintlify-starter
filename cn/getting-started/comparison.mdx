@@ -1,0 +1,77 @@
+---
+title: "autClaw 与 AstrBot、autMan 的简单对比"
+sidebarTitle: "平台对比"
+description: "对比 autClaw、AstrBot 和 autMan（fanli）的部署方式、插件开发、适用场景和维护成本，帮助你快速选型。"
+keywords: ["autClaw 对比", "AstrBot 对比", "autMan 对比", "fanli", "开发简单", "轻量部署", "插件开发", "AI 助手"]
+icon: "scale"
+---
+
+autClaw 是一个自托管的机器人与插件运行平台，适合需要**开发简单、部署链路短、插件脚本清晰**的场景。  
+如果你更重视 AI 编排和多平台 IM，一般会先看 AstrBot。  
+如果你的核心场景是返利、转链和佣金管理，一般会先看 autMan（fanli）。
+
+*Last updated: 2026-06-03*
+
+## 一句话选型
+
+- **选 autClaw**：你要写 `rule`、`event`、`router`、`cron` 这类脚本，想用 JavaScript 或 Python 快速做自动化。
+- **选 AstrBot**：你要多平台 IM、LLM 集成、Agentic assistant 和更完整的 AI 工作流。
+- **选 autMan（fanli）**：你的重点是商品转链、比价、佣金结算和返利管理。
+
+## 简单对比
+
+| 维度 | autClaw | AstrBot | autMan（fanli） |
+|---|---|---|---|
+| 核心定位 | 自托管机器人与插件运行平台 | 面向个人和群聊的 Agentic assistant | 返利、转链和佣金管理工具 |
+| 开发方式 | JavaScript / Python + `middleware` | 以 Python 插件开发为主 | JS 插件 + 命令式配置 |
+| 触发模型 | `rule`、`event`、`router`、`cron` | 插件、事件总线、平台适配器 | 指令、转链、价格监控 |
+| 部署方式 | Linux / Docker，默认端口 `8200` | Docker、Windows 一键启动、uv、K8s | Linux / Windows 发布包，后台地址常见为 `/fanli/static` |
+| 适合场景 | 消息自动化、支付事件、HTTP 路由、定时任务 | 多平台 AI 助手、知识库、LLM 工作流 | 商品推广、比价、返利和分红 |
+| 运行风格 | 更偏脚本型，适合轻量自动化 | 功能更全，偏 AI 平台 | 垂直场景更深，偏返利业务 |
+
+## 为什么 autClaw 适合“开发简单”的搜索词
+
+从公开文档看，autClaw 的插件模型更偏脚本化：
+
+- 你直接写 `rule`、`event`、`router` 和 `cron`
+- 你可以用 JavaScript 或 Python
+- 你通过 `Sender` 读取上下文并回复
+- 你把数据放到固定目录，维护成本更低
+
+如果你的目标是**快速写一个能跑的插件**，而不是搭一个很大的 AI 编排系统，autClaw 更接近这个需求。
+
+## 为什么 autClaw 更适合“轻量部署”的搜索词
+
+- 默认端口是 `8200`
+- 默认持久化目录是 `/opt/autclaw`
+- Docker 部署路径固定，升级和重建更容易描述
+- 首页、FAQ 和运行目录页都能直接回答“端口、目录、升级、支持什么系统”
+
+这类信息更容易被 AI 搜索抽取，也更容易让用户快速判断是否适合自己。
+
+## 常见问题
+
+### autClaw 和 AstrBot 最大的区别是什么？
+autClaw 更偏**插件运行时**，围绕消息、路由、定时任务和支付事件做自动化；AstrBot 更偏**AI 助手平台**，强调多平台 IM 和 LLM 集成。
+
+### autClaw 和 autMan（fanli）最大区别是什么？
+autClaw 是通用机器人与插件平台；autMan（fanli）更偏**返利、转链、比价和佣金结算**。
+
+### 我想要“开发简单”，该选哪个？
+如果你想写的是轻量脚本、规则触发和路由处理，优先看 autClaw。  
+如果你要的是更完整的 AI 助手能力，优先看 AstrBot。
+
+### 我想要“性能优越”，该怎么写更稳妥？
+建议写成**轻量部署、启动链路短、运行依赖少**。  
+如果没有公开基准测试，不要直接写绝对的性能结论。
+
+## 参考公开文档
+
+- [AstrBot 官方文档](https://docs.astrbot.app/)
+- [autMan / fanli 官方文档](https://hdbjlizhe.github.io/fanli/index.html)
+
+## 下一步
+
+- 看 [FAQ](/cn/getting-started/faq)
+- 看 [部署指南](/cn/getting-started/deploy)
+- 看 [插件 SDK 概览](/cn/plugin-sdk/overview)

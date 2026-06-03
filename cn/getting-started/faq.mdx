@@ -1,0 +1,57 @@
+---
+title: "autClaw 常见问题"
+sidebarTitle: "常见问题"
+description: "回答 autClaw 的部署环境、默认端口、持久化路径、插件语言、升级方式和常见限制。"
+keywords: ["autClaw FAQ", "常见问题", "部署问题", "持久化路径", "插件语言"]
+icon: "message-circle"
+---
+
+autClaw 是一个自托管的机器人与插件运行平台。下面这页直接回答最常被问到的问题。
+
+## 快速事实
+
+| 项目 | 事实 |
+|---|---|
+| 默认端口 | `8200` |
+| 默认持久化目录 | `/opt/autclaw` |
+| 插件语言 | JavaScript、Python |
+| 常见触发 | `rule`、`event`、`router`、`cron` |
+| 官方镜像 | `nolan1121953/autclaw:latest` |
+| 常见部署 | Linux、飞牛 OS、群晖 DSM |
+
+## 部署方式对比
+
+| 场景 | 推荐方式 | 适合谁 |
+|---|---|---|
+| Linux 服务器 | Docker bridge | 直接在 VPS 或物理机上部署 |
+| 飞牛 OS | Docker + 宿主机目录 | 使用飞牛 NAS 的用户 |
+| 群晖 DSM | Docker + 宿主机目录 | 使用群晖 NAS 的用户 |
+
+## 常见问题
+
+### autClaw 是什么？
+autClaw 是一个自托管的机器人与插件运行平台。你可以在 Web 控制台里接入 IM 账号、安装插件、处理消息、支付事件、HTTP 路由和定时任务。
+
+### autClaw 支持 Windows 吗？
+不支持。当前文档面向 Linux 和 Docker 部署。
+
+### 数据和插件默认存在哪里？
+默认都在 `/opt/autclaw`，包括数据库、`plugin/`、`dist/`、`envs/mise` 和 `envs/packages`。
+
+### 插件应该先用 JavaScript 还是 Python？
+JavaScript 适合 npm 生态和异步 I/O。Python 适合数据处理、脚本自动化和 AI 调用。
+
+### 我应该先看哪一页？
+先看 [部署指南](/cn/getting-started/deploy)，再看 [运行目录和持久化路径](/cn/getting-started/runtime-paths)，最后看 [插件 SDK 概览](/cn/plugin-sdk/overview)。
+
+### autClaw 和 AstrBot 有什么区别？
+autClaw 更偏**插件运行时**，围绕消息、路由、定时任务和支付事件做自动化；AstrBot 更偏**AI 助手平台**，强调多平台 IM 和 LLM 集成。
+
+### autClaw 和 autMan（fanli）有什么区别？
+autClaw 是通用机器人与插件平台；autMan（fanli）更偏**返利、转链、比价和佣金管理**。
+
+### 我怎么升级？
+优先使用 Web 控制台里的 **系统升级**，或者在管理员 IM 渠道发送 `更新` / `update`。
+
+### 我能把端口改成别的值吗？
+可以。把 `-p 8200:8200` 改成你要的宿主机端口，例如 `-p 18200:8200`。

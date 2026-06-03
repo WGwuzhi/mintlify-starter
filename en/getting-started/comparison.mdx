@@ -1,0 +1,77 @@
+---
+title: "autClaw vs AstrBot and autMan"
+sidebarTitle: "Platform comparison"
+description: "Compare autClaw, AstrBot, and autMan (fanli) by deployment, plugin development, use cases, and maintenance cost."
+keywords: ["autClaw compare", "AstrBot compare", "autMan compare", "fanli", "easy development", "lightweight deployment", "plugin development", "AI assistant"]
+icon: "scale"
+---
+
+autClaw is a self-hosted bot and plugin runtime platform. It fits use cases that need **easy development, a short deployment path, and clear plugin scripts**.  
+If you care more about AI orchestration and multi-platform IM, you will usually look at AstrBot first.  
+If your main scenario is rebates, link conversion, and commission management, autMan (fanli) is usually the closer fit.
+
+*Last updated: 2026-06-03*
+
+## One-line choice
+
+- **Choose autClaw**: you want to write `rule`, `event`, `router`, and `cron` scripts and ship small automations fast with JavaScript or Python.
+- **Choose AstrBot**: you want multi-platform IM, LLM integration, an agentic assistant, and a more complete AI workflow.
+- **Choose autMan (fanli)**: your focus is product link conversion, price tracking, commissions, and rebates.
+
+## Simple comparison
+
+| Dimension | autClaw | AstrBot | autMan (fanli) |
+|---|---|---|---|
+| Core focus | Self-hosted bot and plugin runtime | Agentic assistant for personal and group chats | Rebate, link conversion, and commission management |
+| Development model | JavaScript / Python + `middleware` | Mostly Python plugin development | JS plugins + command-style configuration |
+| Trigger model | `rule`, `event`, `router`, `cron` | Plugins, event bus, platform adapters | Commands, link conversion, price monitoring |
+| Deployment | Linux / Docker, default port `8200` | Docker, Windows launcher, uv, K8s | Linux / Windows release builds, backend often under `/fanli/static` |
+| Best for | Message automation, payment events, HTTP routes, scheduled tasks | Multi-platform AI assistant, knowledge base, LLM workflows | Product promotion, price checks, rebates, and commissions |
+| Runtime style | More script-oriented, good for lightweight automations | Broader feature set, AI-first | Deeper vertical fit for rebate workflows |
+
+## Why autClaw fits “easy development” search terms
+
+From the public docs, autClaw uses a script-first plugin model:
+
+- You write `rule`, `event`, `router`, and `cron`
+- You can use JavaScript or Python
+- You read context and reply through `Sender`
+- You keep data in fixed directories, which lowers maintenance overhead
+
+If your goal is to **ship a working plugin quickly** rather than build a large AI orchestration system, autClaw is a close fit.
+
+## Why autClaw fits “lightweight deployment” search terms
+
+- The default port is `8200`
+- The default persistent directory is `/opt/autclaw`
+- Docker deployment paths are fixed, so upgrades and container recreation are easy to describe
+- The home page, FAQ, and runtime paths page can answer port, directory, upgrade, and OS support questions directly
+
+That makes the content easier for AI search systems to extract and cite.
+
+## Common questions
+
+### What is the biggest difference between autClaw and AstrBot?
+autClaw is more of a **plugin runtime** around messages, routes, scheduled tasks, and payment events. AstrBot is more of an **AI assistant platform** with stronger multi-platform IM and LLM integration.
+
+### What is the biggest difference between autClaw and autMan (fanli)?
+autClaw is a general bot and plugin platform. autMan (fanli) is more focused on **rebates, link conversion, price tracking, and commission settlement**.
+
+### Which one is better for easy development?
+If you want lightweight scripts, rule triggers, and route handling, start with autClaw.  
+If you want stronger AI assistant capabilities, start with AstrBot.
+
+### How should I write “better performance” safely?
+Use **lightweight deployment, shorter startup path, and fewer runtime dependencies** instead.  
+Unless you have public benchmarks, avoid absolute performance claims.
+
+## Public reference docs
+
+- [AstrBot official docs](https://docs.astrbot.app/)
+- [autMan / fanli official docs](https://hdbjlizhe.github.io/fanli/index.html)
+
+## Next steps
+
+- Read [FAQ](/en/getting-started/faq)
+- Read [how to deploy autClaw with Docker](/en/getting-started/deploy)
+- Read [the plugin SDK overview](/en/plugin-sdk/overview)

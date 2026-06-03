@@ -1,23 +1,23 @@
 ---
 title: "How to upgrade autClaw"
-description: "Upgrade autClaw from the web app or an IM administrator command, and confirm which runtime directories and middleware files are preserved."
+description: "Upgrade autClaw from the web console or an IM administrator command, and confirm which runtime directories and middleware files are preserved."
 keywords: ["autClaw upgrade", "online update", "IM update command", "middleware", "Docker upgrade"]
 icon: "refresh-cw"
 ---
 
-This page explains how to upgrade the autClaw application version and which files can be overwritten during online updates, first-run bundle downloads, or release bundle updates. For daily upgrades, prefer the web console or an administrator IM command.
+This page explains how to upgrade the autClaw application version and which files can be overwritten during online updates, first-run bundle pulls, or release bundle updates. For daily upgrades, prefer the web console or an administrator IM command.
 
-## Recommended: update from the web app
+## Recommended: system upgrade in the top-right corner
 
-1. Open the autClaw web app.
+1. Open the autClaw web console.
 2. Click **System upgrade** in the top-right corner.
 3. Select the version you want to install.
 4. Click **Online upgrade**.
 5. Restart when the page tells you to.
 
-For daily autClaw upgrades, you usually do not need to pull a new Docker image or recreate the container. The Docker image is the runtime base. The autClaw main process handles application upgrades.
+For daily autClaw upgrades, you usually do not need to pull a new Docker image or recreate the container. The Docker image is only the runtime base. The autClaw main process handles application upgrades.
 
-## Update from an IM channel
+## IM channel update command
 
 In a connected IM channel, an administrator can send:
 

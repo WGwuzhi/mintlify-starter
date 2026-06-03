@@ -1,11 +1,11 @@
 ---
 title: "autClaw Docker operations"
-description: "Use Docker and Docker Compose to view autClaw logs, restart, remove, and update the container on Linux, FNOS, or Synology DSM."
-keywords: ["autClaw Docker", "Docker Compose", "view logs", "update container", "FNOS Docker"]
+description: "Use Docker and Docker Compose to view autClaw logs, restart, remove, and update the container on Linux, Feiniu OS (FNOS), or Synology DSM."
+keywords: ["autClaw Docker", "Docker Compose", "view logs", "update container", "Feiniu OS Docker"]
 icon: "container"
 ---
 
-Use this page for daily container maintenance after autClaw is deployed. You can view logs, recreate the container, pull the latest image, or manage FNOS and Synology DSM persistent directories with Docker Compose.
+Use this page for daily container maintenance after autClaw is deployed. You can view logs, recreate the container, pull the latest image, or use Docker Compose to manage persistent directories on Feiniu OS (FNOS) and Synology DSM.
 
 ## View logs
 
@@ -47,7 +47,7 @@ Optional environment variables:
 | `AUTCLAW_HTTP_PORT` | Host access port. Defaults to `8200`. |
 | `AUTCLAW_IMAGE` | Custom image. Defaults to `nolan1121953/autclaw:latest`. |
 
-## FNOS compose example
+## Feiniu OS (FNOS) compose example
 
 ```bash
 AUTCLAW_HOST_DATA_DIR=/vol1/1000/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d

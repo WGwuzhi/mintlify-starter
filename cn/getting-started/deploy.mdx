@@ -13,6 +13,14 @@ icon: "rocket"
 - 确认宿主机 `8200` 端口未被占用。
 - 准备一个持久化目录，用来保存数据、插件和运行时依赖。
 
+## 选择部署方式
+
+| 场景 | 推荐方式 | 默认目录 |
+|---|---|---|
+| Linux 服务器 | Docker bridge | `/opt/autclaw` |
+| 飞牛 OS | Docker + 宿主机目录 | `/vol1/1000/docker/autclaw` |
+| 群晖 DSM | Docker + 宿主机目录 | `/volume1/docker/autclaw` |
+
 ## Linux 通用部署
 
 默认使用 Docker bridge 网络，并把容器 `8200` 端口映射到宿主机 `8200`。
@@ -108,6 +116,17 @@ docker run -d \
 <Warning>
   不要删除 `/opt/autclaw`、`/vol1/1000/docker/autclaw` 或 `/volume1/docker/autclaw`，除非你明确要清空数据、插件和运行时依赖。
 </Warning>
+
+## 常见问题
+
+### 我能把端口改成别的值吗？
+可以。把 `-p 8200:8200` 改成你想要的宿主机端口，例如 `-p 18200:8200`。
+
+### 重建容器时要保留什么？
+保留宿主机持久化目录，不要删除里面的数据库、插件和依赖。
+
+### Windows 能直接部署吗？
+当前文档面向 Linux 和 Docker 部署，Windows 不在支持范围内。
 
 ## 下一步
 

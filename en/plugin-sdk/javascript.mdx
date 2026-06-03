@@ -1,6 +1,6 @@
 ---
 title: "autClaw JavaScript plugin reference"
-description: "Use autClaw middleware.js for JavaScript plugins, including Sender, message replies, storage, routes, proactive push, and cron tasks."
+description: "Use autClaw middleware.js for JavaScript plugins, including the entry point, Sender, message replies, storage, routes, and cron tasks."
 keywords: ["middleware.js", "JavaScript middleware", "Sender", "autClaw plugin development"]
 icon: "braces"
 ---
@@ -111,13 +111,9 @@ main().catch((error) => {
 })
 ```
 
-## Development tips
+## Avoid these patterns
 
-- `sender.param(1)` starts at `1`, not `0`.
-- For proactive push to multi-account targets, prefer passing `account_id` explicitly to avoid sending from the wrong account after default-account changes.
-- When a message trigger targets the same IM as the current chat, `push(...)` uses the current chat account by default. Cron / fake contexts and cross-IM pushes use the target IM default account by default.
-- To download user-uploaded files, use `sender.getMediaItems()` + `downloadAdapterFile(...)`; do not parse platform raw fields manually.
-- `set(...)` / `bucketSet(...)` save strings. Manually call `JSON.stringify(...)` for objects.
-- `listen(...)` / `input(...)` return an empty string on timeout. Handle empty values.
-- `waitPay(..., amount)` records and returns amount matching results. Check `amount_matched` before delivery.
-- Route plugins should return objects with `sender.response(data)`. For plain text, you can use `sender.reply(text)`.
+- Do not hard-code runtime credentials, ports, or service addresses.
+- Do not bypass the SDK to call autClaw services directly.
+- Do not manually parse platform raw file fields. Use SDK download helpers.
+- Do not put large datasets into one bucket key. Split data across keys for easier maintenance.

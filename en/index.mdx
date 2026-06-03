@@ -1,17 +1,28 @@
 ---
 title: "autClaw deployment and plugin docs"
-description: "Deploy autClaw with Docker on Linux, FNOS, or Synology, manage runtime directories and upgrades, and build JavaScript or Python plugins."
+description: "Deploy autClaw with Docker on Linux, Feiniu OS (FNOS), or Synology, manage runtime directories and upgrades, and build JavaScript or Python plugins."
 keywords: ["autClaw docs", "autClaw deployment", "Docker deployment", "bot plugins", "plugin SDK"]
 icon: "bot"
 ---
 
-autClaw is built for Linux and Docker production environments. The Docker image provides a stable runtime base. By default, the app, frontend assets, plugin directory, and runtime dependencies are persisted under `/opt/autclaw`.
+autClaw is a self-hosted bot and plugin runtime platform. After you deploy it on Linux or Docker, you can connect IM accounts, install plugins, and handle messages, payment events, HTTP routes, and scheduled tasks from the web console.
 
 ## What is autClaw?
 
-autClaw is a self-hosted automation bot and plugin runtime. You can connect IM accounts, install or write plugins, and handle messages, notifications, payment events, HTTP routes, and scheduled tasks from the web console.
+autClaw is designed for local deployment, persistent data, and extensible plugins. The Docker image provides a stable runtime base. By default, the app, frontend assets, plugin directory, and runtime dependencies are persisted under `/opt/autclaw`.
 
 If Docker is ready, follow [How to deploy autClaw with Docker](/en/getting-started/deploy) to start the service.
+
+## Key facts
+
+| Item | Fact |
+| --- | --- |
+| Default port | `8200` |
+| Default persistent directory | `/opt/autclaw` |
+| Plugin languages | JavaScript, Python |
+| Common triggers | `rule`, `event`, `router`, `cron` |
+| Official image | `nolan1121953/autclaw:latest` |
+| Common deployment environments | Linux, Feiniu OS (FNOS), Synology DSM |
 
 <CardGroup cols={2}>
   <Card title="Deploy autClaw" icon="rocket" href="/en/getting-started/deploy">
@@ -25,6 +36,12 @@ If Docker is ready, follow [How to deploy autClaw with Docker](/en/getting-start
   </Card>
   <Card title="Media sending" icon="image" href="/en/plugin-sdk/media">
     Send images, voice, video, files, and mixed messages.
+  </Card>
+  <Card title="FAQ" icon="message-circle" href="/en/getting-started/faq">
+    Check ports, directories, system support, and upgrade paths quickly.
+  </Card>
+  <Card title="Platform comparison" icon="scale" href="/en/getting-started/comparison">
+    Compare autClaw, AstrBot, and autMan (fanli) by workflow and use case.
   </Card>
 </CardGroup>
 
@@ -41,16 +58,28 @@ docker run -d --name autclaw --restart unless-stopped --network bridge \
 docker logs -f autclaw
 
 # Upgrade autClaw
-# Open "System upgrade" in the top-right corner of the web app,
+# Open "System upgrade" in the top-right corner of the web console,
 # or send this command in an IM channel: update
 ```
 
 <Note>
-  autClaw currently targets Linux package execution and Docker + Linux package execution. Windows is not supported.
+  autClaw currently focuses on standalone Linux package startup and Docker shell + Linux package startup. Windows is not supported.
 </Note>
+
+## Common questions
+
+### Does autClaw support Windows?
+No. The current docs target Linux and Docker deployments.
+
+### Where are plugins and the database stored by default?
+They all live under `/opt/autclaw`, including the database, `plugin/`, `dist/`, `envs/mise`, and `envs/packages`.
+
+### Which page should I read first?
+Start with [How to deploy autClaw with Docker](/en/getting-started/deploy), then read [runtime directories and paths](/en/getting-started/runtime-paths), and finish with [the plugin SDK overview](/en/plugin-sdk/overview).
 
 ## Next steps
 
 - Start the service with [How to deploy autClaw with Docker](/en/getting-started/deploy).
 - Review [runtime directories and paths](/en/getting-started/runtime-paths) before moving data or recreating containers.
+- If you are comparing AstrBot or autMan (fanli), read [platform compare](/en/getting-started/comparison) first.
 - Use the [plugin SDK overview](/en/plugin-sdk/overview) to build JavaScript or Python plugins.

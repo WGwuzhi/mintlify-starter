@@ -5,13 +5,24 @@ keywords: ["autClaw 文档", "autClaw 部署", "Docker 部署", "机器人插件
 icon: "bot"
 ---
 
-autClaw 面向 Linux + Docker 生产环境。Docker 镜像提供稳定运行基座，应用本体、前端资源、插件目录和运行时依赖默认持久化到 `/opt/autclaw`。
+autClaw 是一个自托管的机器人与插件运行平台。你把服务部署到 Linux 或 Docker 后，就可以在 Web 控制台接入 IM 账号、安装插件、处理消息、支付事件、HTTP 路由和定时任务。
 
 ## autClaw 是什么
 
-autClaw 是一个自部署的自动化机器人和插件运行平台。你可以在 Web 控制台接入 IM 账号，安装或编写插件，处理消息、通知、支付事件、HTTP 路由和定时任务。
+autClaw 面向需要本地部署、数据持久化和可编写插件的场景。Docker 镜像提供稳定运行基座，应用本体、前端资源、插件目录和运行时依赖默认持久化到 `/opt/autclaw`。
 
 想先了解能力范围，查看 [autClaw 功能概览](/cn/features)。已经准备好 Docker 时，直接按 [如何用 Docker 部署 autClaw](/cn/getting-started/deploy) 启动服务。
+
+## 关键事实
+
+| 项目 | 事实 |
+| --- | --- |
+| 默认端口 | `8200` |
+| 默认持久化目录 | `/opt/autclaw` |
+| 插件语言 | JavaScript、Python |
+| 常见触发 | `rule`、`event`、`router`、`cron` |
+| 官方镜像 | `nolan1121953/autclaw:latest` |
+| 常见部署环境 | Linux、飞牛 OS、群晖 DSM |
 
 <CardGroup cols={2}>
   <Card title="部署 autClaw" icon="rocket" href="/cn/getting-started/deploy">
@@ -25,6 +36,12 @@ autClaw 是一个自部署的自动化机器人和插件运行平台。你可以
   </Card>
   <Card title="媒体发送" icon="image" href="/cn/plugin-sdk/media">
     发送图片、语音、视频、文件和混合消息。
+  </Card>
+  <Card title="常见问题" icon="message-circle" href="/cn/getting-started/faq">
+    快速确认端口、目录、系统支持范围和升级方式。
+  </Card>
+  <Card title="平台对比" icon="scale" href="/cn/getting-started/comparison">
+    对比 autClaw、AstrBot 和 autMan（fanli）的开发方式和适用场景。
   </Card>
 </CardGroup>
 
@@ -48,8 +65,20 @@ docker logs -f autclaw
   autClaw 当前以 Linux 包单独启动和 Docker 外壳 + Linux 包启动为主，不兼容 Windows。
 </Note>
 
+## 常见问题
+
+### autClaw 支持 Windows 吗？
+不支持。当前文档以 Linux 和 Docker 部署为主。
+
+### 插件和数据库默认存在哪里？
+默认都在 `/opt/autclaw`，包括数据库、`plugin/`、`dist/`、`envs/mise` 和 `envs/packages`。
+
+### 我应该先看哪一页？
+先看 [部署指南](/cn/getting-started/deploy)，再看 [运行目录和持久化路径](/cn/getting-started/runtime-paths)，最后看 [插件 SDK 概览](/cn/plugin-sdk/overview)。
+
 ## 下一步
 
 - 按 [部署指南](/cn/getting-started/deploy) 启动 autClaw。
 - 查看 [运行目录和持久化路径](/cn/getting-started/runtime-paths)，确认哪些数据需要保留。
+- 如果你正在对比 AstrBot 或 fanli/autMan，先看 [平台对比](/cn/getting-started/comparison)。
 - 从 [插件 SDK 概览](/cn/plugin-sdk/overview) 开始编写 JavaScript 或 Python 插件。
