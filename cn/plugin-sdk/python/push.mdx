@@ -1,0 +1,117 @@
+---
+title: "主动推送"
+description: "使用 Python push、pushImage 和 pushMixed 主动发送文本、媒体和 mixed 消息，并指定发送账号。"
+keywords: ["Python 主动推送", "pushMixed", "pushImage", "account_id"]
+icon: "send"
+---
+
+主动推送不依赖 `Sender` 的回复目标。你需要指定目标 IM、群或用户。群推送传 `groupCode`；私聊推送传 `userID`。
+
+## 函数总览
+
+| 函数 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `push(imType, groupCode, userID, title, content, options=None, timeout=None)` | 推送文本。 | `imType`：必填；`groupCode`：群 ID，私聊传 `""`；`userID`：用户 ID，群推送传 `""`；`title`：标题或备用文本；`content`：文本。 | `int`，成功发送的目标数，通常是 `0` 或 `1`。 |
+| `pushImage(imType, groupCode, userID, title, imageUrl, options=None, timeout=None)` | 推送图片。 | 前四项同上；`imageUrl`：图片来源；`options`：可选媒体参数。 | `int` |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl, options=None, timeout=None)` | 推送语音。 | `voiceUrl`：语音来源；`options`：可选媒体参数。 | `int` |
+| `pushVideo(imType, groupCode, userID, title, videoUrl, options=None, timeout=None)` | 推送视频。 | `videoUrl`：视频来源；`options`：可选媒体参数。 | `int` |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options=None, timeout=None)` | 推送文件。 | `fileUrl`：文件来源；`options` 可传账号、文件名和 MIME 类型。 | `int` |
+| `pushMixed(imType, groupCode, userID, title, items, options=None, timeout=None)` | 推送混合消息。 | `items`：mixed items；`options`：可选账号参数。 | `int` |
+
+## `push(...)`
+
+<ParamField path="imType" type="str" required>
+  目标 IM 类型，例如 `qq`、`weixin`、`qx`，以已启用适配器为准。
+</ParamField>
+
+<ParamField path="groupCode" type="str" required>
+  群 ID / 群号。群推送必填；私聊传空字符串。
+</ParamField>
+
+<ParamField path="userID" type="str" required>
+  用户 ID。私聊推送必填；群推送可传空字符串。
+</ParamField>
+
+<ParamField path="options.account_id" type="str">
+  目标账号 ID。也可写作 `accountID` 或 `accountId`。显式传入时优先级最高。
+</ParamField>
+
+<ParamField path="timeout" type="int">
+  请求超时时间，传毫秒值。
+</ParamField>
+
+```python
+from middleware import push
+
+sent = push("qq", "123456", "", "日报", "今日任务完成", {
+    "account_id": "bot_qq_ops",
+})
+
+if sent == 0:
+    print("未发送：请检查目标、适配器状态或账号是否在线")
+```
+
+## 推送账号选择
+
+以下规则适用于 `push(...)`、`pushImage(...)`、`pushVoice(...)`、`pushVideo(...)`、`pushFile(...)` 和 `pushMixed(...)`。
+
+选择规则：
+
+1. 如果 `options` 中有 `account_id`，使用它。
+2. 如果是消息触发，并且目标 IM 与当前会话 IM 一致，默认使用当前会话账号。
+3. 如果是 cron / fake，使用目标 IM 的默认账号。
+4. 如果跨 IM 推送，使用目标 IM 的默认账号。
+5. 如果目标 IM 没有默认账号，运行时会选择第一个在线可发送账号；没有可发送账号时返回 `0` 或抛出适配器离线错误。
+
+<Tip>
+  能确定发送账号时，优先显式传 `options.account_id`。这比依赖“当前会话账号”或“目标 IM 默认账号”更稳定。
+</Tip>
+
+## 媒体推送
+
+```python
+from middleware import pushImage, pushVoice, pushVideo, pushFile, pushMixed
+
+pushImage("qq", "123456", "", "日报图片", "./daily.png", {
+    "account_id": "bot_qq_ops",
+})
+pushVoice("qq", "123456", "", "语音提醒", "./notice.wav", {
+    "accountId": "bot_qq_ops",
+}, 15000)
+pushVideo("qq", "123456", "", "演示视频", "./demo.mp4", {
+    "account_id": "bot_qq_ops",
+})
+pushFile("qq", "123456", "", "日报文件", "./daily.csv", {
+    "account_id": "bot_qq_ops",
+    "filename": "daily.csv",
+    "mimeType": "text/csv",
+})
+pushMixed("qq", "123456", "", "处理结果", [
+    {"type": "text", "text": "结果如下："},
+    {"type": "image", "source": "./result.png"},
+], {
+    "account_id": "bot_qq_ops",
+})
+```
+
+<Tip>
+  所有主动推送 helper 都支持 `options` 和 `timeout`。`options.account_id` / `accountID` / `accountId` 可显式指定发送账号；`filename` / `fileName` / `file_name` 与 `mimeType` / `mime_type` 用于补充媒体元数据。
+</Tip>
+
+## 返回值
+
+主动推送返回成功发送的目标数，通常是 `0` 或 `1`。如果适配器返回错误，SDK 会抛出 `Exception`。
+
+```python
+try:
+    sent = push("qq", "123456", "", "提醒", "任务完成")
+    if sent == 0:
+        print("没有可用账号或目标不可达")
+except Exception as error:
+    print(error)
+```
+
+## 下一步
+
+- 媒体来源格式：[`Media sending`](/cn/plugin-sdk/media)
+- 定时触发推送：[`工具、Cron 和群管理`](/cn/plugin-sdk/python/tools-cron-group)

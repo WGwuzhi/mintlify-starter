@@ -12,11 +12,11 @@ Proactive push does not depend on the reply target of `Sender`. You need to spec
 | Function | Purpose | Parameters | Returns |
 |---|---|---|---|
 | `push(imType, groupCode, userID, title, content, options?, timeout?)` | Push text. | `imType`: required; `groupCode`: group ID, pass `''` for private chat; `userID`: user ID, pass `''` for group push; `title`: title or fallback text; `content`: text; `options`: optional; `timeout`: optional milliseconds. | `Promise<number>`, number of successfully sent targets, usually `0` or `1`. |
-| `pushImage(imType, groupCode, userID, title, imageUrl)` | Push an image. | First four parameters are the same; `imageUrl`: required image source. | `Promise<number>` |
-| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | Push voice/audio. | `voiceUrl`: required voice source. | `Promise<number>` |
-| `pushVideo(imType, groupCode, userID, title, videoUrl)` | Push a video. | `videoUrl`: required video source. | `Promise<number>` |
-| `pushFile(imType, groupCode, userID, title, fileUrl, options?)` | Push a file. | `fileUrl`: required file source; `options` can pass filename and MIME type. The current helper does not forward `account_id` to the top level. | `Promise<number>` |
-| `pushMixed(imType, groupCode, userID, title, items)` | Push a mixed message. | `items`: required mixed items. | `Promise<number>` |
+| `pushImage(imType, groupCode, userID, title, imageUrl, options?, timeout?)` | Push an image. | First four parameters are the same; `imageUrl`: required image source; `options`: optional media parameters; `timeout`: optional milliseconds. | `Promise<number>` |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl, options?, timeout?)` | Push voice/audio. | `voiceUrl`: required voice source; `options`: optional media parameters; `timeout`: optional milliseconds. | `Promise<number>` |
+| `pushVideo(imType, groupCode, userID, title, videoUrl, options?, timeout?)` | Push a video. | `videoUrl`: required video source; `options`: optional media parameters; `timeout`: optional milliseconds. | `Promise<number>` |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options?, timeout?)` | Push a file. | `fileUrl`: required file source; `options` can pass account, filename, and MIME type; `timeout`: optional milliseconds. | `Promise<number>` |
+| `pushMixed(imType, groupCode, userID, title, items, options?, timeout?)` | Push a mixed message. | `items`: required mixed items; `options`: optional account parameters; `timeout`: optional milliseconds. | `Promise<number>` |
 
 ## `push(imType, groupCode, userID, title, content, options?, timeout?)`
 
@@ -66,9 +66,11 @@ if (sent === 0) {
 
 ## Push account selection
 
+These rules apply to `push(...)`, `pushImage(...)`, `pushVoice(...)`, `pushVideo(...)`, `pushFile(...)`, and `pushMixed(...)`.
+
 Selection rules:
 
-1. For `push(...)`, if `options` contains `account_id`, use it.
+1. If `options` contains `account_id`, use it.
 2. If this is a message trigger and the target IM is the same as the current chat IM, use the current chat account by default.
 3. If this is cron / fake, use the target IM default account.
 4. For cross-IM push, use the target IM default account.
@@ -97,22 +99,31 @@ await push('weixin', '', 'wxid_user', 'Notice', 'Done')
 ## Media push
 
 ```js
-await pushImage('qq', '123456', '', 'Daily image', './daily.png')
-await pushVoice('qq', '123456', '', 'Voice reminder', './notice.wav')
-await pushVideo('qq', '123456', '', 'Demo video', './demo.mp4')
+await pushImage('qq', '123456', '', 'Daily image', './daily.png', {
+  account_id: 'bot_qq_ops',
+})
+await pushVoice('qq', '123456', '', 'Voice reminder', './notice.wav', {
+  accountId: 'bot_qq_ops',
+}, 15000)
+await pushVideo('qq', '123456', '', 'Demo video', './demo.mp4', {
+  account_id: 'bot_qq_ops',
+})
 await pushFile('qq', '123456', '', 'Daily file', './daily.csv', {
+  account_id: 'bot_qq_ops',
   filename: 'daily.csv',
   mimeType: 'text/csv',
 })
 await pushMixed('qq', '123456', '', 'Result', [
   { type: 'text', text: 'Result:' },
   { type: 'image', source: './result.png' },
-])
+], {
+  account_id: 'bot_qq_ops',
+})
 ```
 
-<Warning>
-  `pushImage(...)`, `pushVoice(...)`, `pushVideo(...)`, and `pushFile(...)` currently do not expose a top-level `account_id` parameter in the JS helper. `pushFile(...)` `options` are only used to construct `media` and do not become a top-level account field. `pushMixed(...)` helper does not declare an `options` parameter; do not assume it can explicitly choose an account like `push(...)`. If you need to force an account for media push, prefer sending a text notification with `push(...)` first. If you need lower-level capability, evaluate version compatibility before calling `accessService('/pushImage', ...)` with top-level `account_id` yourself.
-</Warning>
+<Tip>
+  Media push helpers also support `options` and `timeout`. Use `options.account_id` / `accountID` / `accountId` to choose the sending account explicitly. Use `filename` / `fileName` / `file_name` and `mimeType` / `mime_type` to add media metadata.
+</Tip>
 
 ## Return value
 

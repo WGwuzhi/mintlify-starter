@@ -1,14 +1,14 @@
 ---
 title: "Python 中间件参考"
 icon: "code"
-description: "查看 autClaw Python 插件 middleware.py 的 Sender 用法、消息回复、媒体发送、存储、路由和定时任务。"
+description: "查看 autClaw Python 插件 middleware.py 的导入、Sender、存储、路由、主动推送、Cron 和类型签名。"
 keywords: ["middleware.py", "Python 插件", "Sender", "autClaw 插件开发"]
 ---
 
-`plugin/scripts/middleware.py` 是 Python 普通插件的 SDK。你通过它创建 `Sender`、读取消息上下文、回复文本或媒体、保存数据、下载文件、等待用户输入和管理定时任务。
+`plugin/scripts/middleware.py` 是 Python 普通插件的 SDK。你通过它创建 `Sender`，再读取当前上下文、回复消息、保存数据、等待输入、处理支付、下载用户上传文件、处理 HTTP 路由、主动推送和管理运行时定时任务。
 
 <Note>
-  新插件优先使用 `from middleware import Sender, getSenderID`。不要在插件里硬编码凭据、端口或服务地址。
+  新插件优先使用 `from middleware import Sender, getSenderID`。不要在插件里硬编码凭据、端口或 autClaw 内部服务地址。
 </Note>
 
 ## 快速开始
@@ -25,9 +25,38 @@ text = sender.param(1)
 sender.reply(text or "请输入内容")
 ```
 
-Python SDK 方法是同步调用。失败时会抛出 `Exception`，建议在关键流程里捕获并回复可执行提示。
+Python SDK 方法是同步调用。失败时会抛出 `Exception`，建议在发送网络请求、媒体或文件的流程里捕获异常，并回复可执行提示。
 
-## 导入方式
+## 按任务查阅
+
+<CardGroup cols={2}>
+  <Card title="上下文和基础类型" icon="circle-dot" href="/cn/plugin-sdk/python/context">
+    导入方式、`senderID`、返回包装、`SendReceipt`、`MediaItem` 和下载返回体。
+  </Card>
+  <Card title="Sender 消息能力" icon="message-circle" href="/cn/plugin-sdk/python/sender-messages">
+    读取用户和会话、匹配参数、回复文本/媒体、撤回、`replyMixed(...)`。
+  </Card>
+  <Card title="等待输入和支付" icon="hourglass" href="/cn/plugin-sdk/python/wait-and-payment">
+    `listen(...)`、`input(...)`、`waitPay(exitcode, timeout, amount=None)` 和金额匹配细节。
+  </Card>
+  <Card title="事件、媒体和文件" icon="file-down" href="/cn/plugin-sdk/python/media-files">
+    `getMediaItems()`、`fileDownload(...)`、`downloadAdapterFile(...)`、`getGroupMemberList(...)`。
+  </Card>
+  <Card title="存储和路由" icon="database" href="/cn/plugin-sdk/python/storage-and-routes">
+    默认存储、命名 bucket、HTTP router 请求和响应别名。
+  </Card>
+  <Card title="主动推送" icon="send" href="/cn/plugin-sdk/python/push">
+    `push(...)` / `pushImage(...)` / `pushMixed(...)` 的目标、账号选择和返回值。
+  </Card>
+  <Card title="工具、Cron 和群管理" icon="wrench" href="/cn/plugin-sdk/python/tools-cron-group">
+    `import_module(...)`、系统工具、`Cron`、群邀请/禁言/公告。
+  </Card>
+  <Card title="Python 签名速查" icon="file-code" href="/cn/plugin-sdk/python/signatures">
+    导航内的 `.pyi` 风格签名，方便 IDE 和 AI 通过 MCP 检索。
+  </Card>
+</CardGroup>
+
+## 常用导入
 
 ```python
 from middleware import (
@@ -38,7 +67,11 @@ from middleware import (
     bucketSet,
     fileDownload,
     downloadAdapterFile,
+    getGroupMemberList,
     import_module,
+    push,
+    pushImage,
+    pushMixed,
 )
 
 sender = Sender(getSenderID())
@@ -48,374 +81,8 @@ sender = Sender(getSenderID())
 
 - 使用 `Sender` 处理当前消息、当前路由请求或当前事件。
 - 使用顶层函数做全局操作，例如 `bucketGet(...)`、`pushImage(...)`、`fileDownload(...)`。
-- `listen`、`input` 和 `waitPay` 的业务超时参数使用毫秒。
-
-## 常用返回值
-
-### SendReceipt
-
-文本、媒体和撤回类方法通常返回发送回执。
-
-```json
-{
-  "ok": true,
-  "message_id": "123456",
-  "messageid": "123456",
-  "message_ids": ["123456"],
-  "raw": {},
-  "action": "sendText"
-}
-```
-
-适配器可能返回额外字段。判断失败时优先检查 `receipt.get("ok") is False`，消息 ID 同时兼容 `message_id` 和 `messageid`。
-
-### FileDownloadResult
-
-`fileDownload(...)` 和 `downloadAdapterFile(...)` 返回本地文件信息。
-
-```json
-{
-  "path": "/opt/autclaw/file/demo.png",
-  "file_path": "/opt/autclaw/file/demo.png",
-  "file_name": "demo.png",
-  "mime_type": "image/png",
-  "file_size": 12345
-}
-```
-
-### MediaItem
-
-`sender.getMediaItems()` 返回当前事件或最近一次 `listen/input` 捕获到的媒体项。
-
-```python
-{
-    "type": "file",
-    "source": "...",
-    "name": "report.csv",
-    "mime_type": "text/csv",
-}
-```
-
-把用户上传的文件项传给 `downloadAdapterFile(...)`，不要手动解析平台原始字段。
-
-## Sender
-
-创建一个 `Sender`：
-
-```python
-sender = Sender(getSenderID())
-```
-
-### 读取消息上下文
-
-| 方法 | 返回 | 说明 |
-|---|---|---|
-| `getImtype()` | `str` | 当前 IM 类型。 |
-| `getUserID()` | `str` | 当前用户 ID。 |
-| `getUserName()` | `str` | 当前用户昵称。 |
-| `getUserAvatarUrl()` | `str` | 当前用户头像 URL。 |
-| `getChatID()` | `str` | 当前会话 ID。 |
-| `getChatName()` | `str` | 当前会话名称。 |
-| `getGroupName()` | `str` | 群名，等同于会话名称。 |
-| `isAdmin()` | `bool` | 当前用户是否为管理员。 |
-| `isAI()` | `bool` | 当前消息是否来自 AI 触发上下文。 |
-| `getAIParam()` | `str` | AI 参数。 |
-| `getMessage()` | `str` | 当前消息文本。 |
-| `getMessageID()` | `str` | 当前消息 ID。 |
-| `getHistoryMessageIDs(number)` | `list[str]` | 最近消息 ID。 |
-| `param(i)` | `str` | 读取 `rule` 正则捕获，`i` 从 `1` 开始。 |
-
-```python
-user = sender.getUserName()
-message = sender.getMessage()
-sender.reply(f"{user} 发送了：{message}")
-```
-
-### 回复文本和媒体
-
-```python
-sender.reply("普通文本")
-sender.replyMarkdown("# 标题")
-sender.replyImage("https://example.com/a.png")
-sender.replyVoice("./voice.wav")
-sender.replyVideo("./demo.mp4")
-sender.replyFile("./report.csv", {"file_name": "report.csv"})
-sender.replyMixed([
-    {"type": "text", "text": "结果："},
-    {"type": "image", "source": "./result.png"},
-])
-```
-
-| 方法 | 参数 | 返回 |
-|---|---|---|
-| `reply(text)` | `str` | `SendReceipt` |
-| `replyMarkdown(markdown)` | `str` | `SendReceipt` |
-| `replyImage(source, options=None)` | 媒体来源 | `SendReceipt` |
-| `replyVoice(source, options=None)` | 媒体来源 | `SendReceipt` |
-| `replyVideo(source, options=None)` | 媒体来源 | `SendReceipt` |
-| `replyFile(source, options=None)` | 媒体来源 | `SendReceipt` |
-| `replyMixed(items, options=None)` | mixed 列表 | `SendReceipt` |
-| `returnValue(text)` | `str` | 运行结果 |
-
-媒体来源和 mixed 写法见 [`Media sending`](/cn/plugin-sdk/media)。
-
-### 控制流程
-
-| 方法 | 参数 | 说明 |
-|---|---|---|
-| `setContinue()` | 无 | 允许继续匹配后续插件。 |
-| `recallMessage(messageid)` | 消息 ID | 撤回消息。 |
-| `breakIn(content)` | 文本 | 把新文本重新送入消息处理。 |
-
-```python
-if sender.isAdmin():
-    sender.setContinue()
-```
-
-### 等待输入和支付
-
-| 方法 | 参数 | 返回 |
-|---|---|---|
-| `listen(waitTime, recallTime=0, scope="")` | 等待毫秒数，可选撤回毫秒数，可选 `group` | 用户输入、事件对象或超时标记。 |
-| `input(waitTime, recallTime=0, scope="")` | 同 `listen` | 用户输入、事件对象或超时标记。 |
-| `waitPay(exitcode, timeout, amount=None)` | 订单标识、超时毫秒数、可选金额 | `timeout` / `busy` / 支付成功对象。 |
-| `atWaitPay()` | 无 | `bool` |
-
-```python
-sender.reply("请在 60 秒内发送验证码")
-code = sender.input(60000)
-sender.reply(f"收到：{code}")
-```
-
-如果允许同群任意成员回答，把第三个参数设为 `"group"`：
-
-```python
-answer = sender.input(60000, 0, "group")
-```
-
-`listen(60000, "group")` 也会把第二个字符串参数识别为作用域。
-
-### 事件和媒体项
-
-| 方法 | 返回 | 说明 |
-|---|---|---|
-| `getPluginName()` | `str` | 当前插件名称。 |
-| `getPluginVersion()` | `str` | 当前插件版本。 |
-| `getEventType()` | `str` | 当前事件类型。 |
-| `setEventType(eventType)` | 运行结果 | 设置事件类型。 |
-| `getEventData()` | JSON-like | 当前事件数据。 |
-| `setEventData(eventData)` | 运行结果 | 设置事件数据。 |
-| `getMediaItems()` | `list[dict]` | 当前事件或最近一次等待输入捕获到的媒体。 |
-
-```python
-items = sender.getMediaItems()
-file_item = next((item for item in items if item.get("type") == "file"), None)
-```
-
-### HTTP 路由请求
-
-在 manifest 中声明 `router` 和 `method` 后，可以用这些方法读取请求并响应。
-
-```python
-#[router: /demo/{id}]
-#[method: post]
-from middleware import Sender, getSenderID
-
-sender = Sender(getSenderID())
-params = sender.getRouterParams()
-body = sender.getRouterBody()
-sender.response({"ok": True, "id": params.get("id"), "body": body})
-```
-
-| 方法 | 返回 | 说明 |
-|---|---|---|
-| `getRouterPath()` | `str` | 当前路由路径。 |
-| `getRouterParams()` | `dict` | 路由参数。 |
-| `getRouterMethod()` | `str` | 请求方法。 |
-| `getRouterHeaders()` | `dict` | 请求头。 |
-| `getRouterCookies()` | `dict` | Cookie。 |
-| `getRouterBody()` | JSON-like | 请求体。 |
-| `response(data)` | 运行结果 | 返回 JSON 数据。 |
-
-Python 当前使用 `getRouterPath()`、`getRouterMethod()` 和 `getRouterBody()`；不要照搬 JavaScript 的 `getRouter()` / `getMethod()` / `getRouterData()` 别名。
-
-## 存储
-
-### 默认存储
-
-默认存储适合保存少量插件状态。
-
-```python
-set("last_user", "10001")
-user = get("last_user")
-delete("last_user")
-```
-
-| 函数 | 参数 | 返回 |
-|---|---|---|
-| `get(key)` | `str` | `str`，不存在时返回空字符串。 |
-| `set(key, value)` | key + 字符串值 | `bool` |
-| `delete(key)` | `str` | `bool` |
-
-<Warning>
-  当前存储会把 `value` 按字符串保存。需要保存对象时，请先 `json.dumps(...)`，读取后再 `json.loads(...)`。
-</Warning>
-
-### 命名 bucket
-
-`bucket` 名称里的 `.` 表示子级 bucket，例如 `shop.orders` 表示 `shop` 下的 `orders`。运行时最多允许 3 级 bucket；推荐最多使用 3 级，避免权限配置和排查问题时层级过深。
-
-```python
-import json
-
-bucketSet("my_plugin.config", "runtime", json.dumps({"enabled": True}))
-bucketSet("my_plugin.users", "10001", json.dumps({"claimed": True}))
-
-raw = bucketGet("my_plugin.config", "runtime")
-keys = bucketAllKeys("my_plugin.users")
-all_values = bucketAll("my_plugin.users")
-```
-
-推荐示例：`my_plugin`、`my_plugin.users`、`my_plugin.orders.paid`。不要使用超过 3 级的名称，例如 `my_plugin.orders.paid.2026`。
-
-| 函数 / Sender 方法 | 参数 | 返回 |
-|---|---|---|
-| `bucketGet(bucket, key)` | bucket + key | `str`，不存在时返回空字符串。 |
-| `bucketSet(bucket, key, value)` | bucket + key + 字符串值 | `bool` |
-| `bucketDel(bucket, key)` | bucket + key | `bool` |
-| `bucketKeys(bucket=None, value=None)` | bucket 和可选值过滤 | `list[str]` |
-| `bucketAllKeys(bucket)` | bucket | `list[str]` |
-| `bucketAll(bucket)` | bucket | `dict[str, str]` |
-
-`Sender` 也提供同名 bucket 方法，适合想把调用绑定到当前会话上下文的场景。
-
-## 文件和媒体工具
-
-| 函数 | 参数 | 返回 |
-|---|---|---|
-| `fileDownload(url, path=None)` | 下载远程 URL、`base64://...` 或 data URI | `FileDownloadResult` |
-| `downloadAdapterFile(file, options=None, timeout=None)` | 下载用户上传的文件项 | `FileDownloadResult` |
-| `download_adapter_file(...)` | `downloadAdapterFile` 别名 | `FileDownloadResult` |
-| `getGroupMemberList(group_id_or_options=None, options=None, timeout=None)` | 获取群成员列表 | 群成员列表对象 |
-| `get_group_member_list(...)` | `getGroupMemberList` 别名 | 群成员列表对象 |
-
-```python
-downloaded = fileDownload("https://example.com/a.png", "images")
-sender.replyImage(downloaded["path"])
-
-items = sender.getMediaItems()
-file_item = next((item for item in items if item.get("type") == "file"), None)
-if file_item:
-    saved = downloadAdapterFile(file_item, {"path": "imports"})
-    sender.reply(f"已保存：{saved.get('file_name')}")
-```
-
-更多媒体说明见 [`Media sending`](/cn/plugin-sdk/media)。
-
-## 主动推送
-
-主动推送不依赖当前 `Sender`，需要指定 IM 类型、群和用户。
-
-| 函数 | 参数 | 说明 |
-|---|---|---|
-| `push(imType, groupCode, userID, title, content)` | 目标 + 标题 + 文本 | 推送文本。当前 helper 不返回结果。 |
-| `pushImage(imType, groupCode, userID, title, imageUrl)` | 目标 + 图片 | 推送图片。 |
-| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | 目标 + 语音 | 推送语音。 |
-| `pushVideo(imType, groupCode, userID, title, videoUrl)` | 目标 + 视频 | 推送视频。 |
-| `pushFile(imType, groupCode, userID, title, fileUrl, options=None)` | 目标 + 文件 | 推送文件。 |
-| `pushMixed(imType, groupCode, userID, title, items)` | 目标 + mixed items | 推送混合消息。 |
-
-```python
-pushImage("qq", "123456", "", "日报", "./daily.png")
-```
-
-## 依赖和工具函数
-
-### import_module
-
-```python
-requests = import_module("requests", version="2.32.3", manager="pip")
-image_module = import_module("PIL.Image", package="pillow", version="10.4.0", manager="pip")
-```
-
-`import_module(module, package="", version="", manager="")` 会先确保依赖可用，再返回导入后的 Python 模块。包名与导入名不一致时，使用 `package` 指定真实包名。
-
-### 系统和实用函数
-
-| 函数 | 返回 | 说明 |
-|---|---|---|
-| `render(template, selector, jsondata)` | 渲染结果 | 渲染 HTML/template，常用于生成图片。 |
-| `getActiveImtypes()` | `list[str]` | 当前启用的 IM 类型。 |
-| `name()` | `str` | 机器人名称。 |
-| `domain()` | `str` | 域名或公网地址。 |
-| `port()` / `getPort()` | `str \| int` | 服务端口。 |
-| `machineId()` | `str` | 机器 ID。 |
-| `version()` | `str` | autClaw 版本。 |
-| `versionInfo()` | `dict` | 结构化版本信息。 |
-| `notifyMasters(content, imtypes=[])` | `bool` | 通知管理员。 |
-| `coffee()` | `bool` | 咖啡码激活状态。 |
-| `spread(msg)` | 运行结果 | 推广转链。 |
-| `getHistoryMessages(imtype="")` | 历史消息列表 | 获取最近历史消息。 |
-| `generateFromSinglePrompt(prompt)` | `str` | 根据单条 prompt 生成文本。 |
-| `pip_install(module, version="")` | `None` | 确保 pip 依赖可用。 |
-| `printf(message)` | `None` | 打印并刷新输出。 |
-
-<Warning>
-  SDK 为兼容保留了 `imtypes=[]` 这类默认参数。你自己的 Python 函数建议使用 `None` 作为默认值，避免可变默认参数问题。
-</Warning>
-
-## Cron
-
-`Cron` 用来管理运行中的定时指令。它不同于 manifest 里的 `cron`：manifest `cron` 用来让当前插件自触发；`Cron` 类用来增删改查运行时定时指令。
-
-```python
-cron = Cron(0)
-items = cron.getCrons()
-item = cron.getCron(1)
-cron_id = cron.addCron("0 9 * * *", False, "daily reminder", True, None, "每日提醒", "", "", "")
-cron.updateCron(cron_id, "0 10 * * *", False, "daily reminder", True, None, "每日提醒", "", "", "")
-cron.delCron(cron_id)
-```
-
-| 方法 | 参数 | 返回 |
-|---|---|---|
-| `Cron(cronID)` | 兼容构造参数 | `Cron` 实例。 |
-| `getCrons()` | 无 | 定时指令列表。 |
-| `getCronByID(id)` | ID | 单个定时指令。 |
-| `getCron(id)` | ID | `getCronByID` 别名。 |
-| `addCron(cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 定时配置 | 新定时 ID 或运行结果。 |
-| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 更新配置 | 运行结果。 |
-| `deleteCron(id)` | ID | 运行结果。 |
-| `delCron(id)` | ID | `deleteCron` 别名。 |
-
-Python 的 `addCron` / `updateCron` 需要传完整位置参数；不需要的字段传 `None` 或空字符串。
-
-## 群管理
-
-这些方法取决于当前 IM 平台支持情况；不支持时可能无效果或返回错误。
-
-```python
-sender.groupInviteIn(friend_id, group_id)
-sender.groupKick(user_id)
-sender.groupBan(user_id, 600)
-sender.groupUnban(user_id)
-sender.groupWholeBan()
-sender.groupWholeUnban()
-sender.groupNoticeSend("公告内容")
-```
-
-## JavaScript 差异
-
-| JavaScript | Python |
-|---|---|
-| `del(key)` | `delete(key)` |
-| `importModule(...)` | `import_module(...)` |
-| `downloadAdapterFile(...)` | `downloadAdapterFile(...)` / `download_adapter_file(...)` |
-| `getGroupMemberList(...)` | `getGroupMemberList(...)` / `get_group_member_list(...)` |
-| `sender.getRouter()` | 使用 `sender.getRouterPath()` |
-| `sender.getMethod()` | 使用 `sender.getRouterMethod()` |
-| `sender.getRouterData()` | 使用 `sender.getRouterBody()` |
-| `new Cron()` | `Cron(cronID)` |
+- `listen(...)`、`input(...)` 和 `waitPay(...)` 的业务超时参数使用毫秒。
+- 对象写入 `set(...)` / `bucketSet(...)` 前，先手动 `json.dumps(...)`。
 
 ## 推荐模板
 
@@ -427,17 +94,34 @@ sender.groupNoticeSend("公告内容")
 from middleware import Sender, getSenderID
 
 sender = Sender(getSenderID())
+
 try:
     value = sender.param(1)
-    sender.reply(value or "请输入内容")
+    if not value:
+        sender.reply("请输入内容，例如：demo hello")
+    else:
+        sender.reply(f"收到：{value}")
 except Exception as error:
     print(error)
+    sender.reply("处理失败，请稍后重试或联系管理员。")
 ```
 
-## 常见错误
+## 与 JavaScript 中间件的实际差异
 
-- `sender.param(1)` 从 `1` 开始，不是 `0`。
-- `set(...)` / `bucketSet(...)` 保存字符串；对象请手动 JSON 序列化。
-- 不要绕过 SDK 直接请求 autClaw 服务；优先使用本页方法。
-- 下载用户上传文件时，使用 `sender.getMediaItems()` + `downloadAdapterFile(...)`。
-- `listen`、`input` 和 `waitPay` 的业务超时使用毫秒。
+下表按当前 `plugin/scripts/middleware.py` 和 `plugin/scripts/middleware.js` 复核：
+
+| 差异点 | JavaScript | Python |
+|---|---|---|
+| 调用方式 | 大多返回 `Promise`，需要 `await`。 | 同步返回，失败抛出 `Exception`。 |
+| 导入方式 | `const { Sender } = require('./middleware.js')` | `from middleware import Sender` |
+| 默认存储删除 | `del(key)` | `delete(key)`；也有 `del_` 别名，避免使用 Python 关键字 `del`。 |
+| 依赖确保 | `importModule(module, versionOrOptions?, manager?)` | `import_module(module, package="", version="", manager="")`；当前也保留 `importModule` 别名。 |
+| 路由别名 | `sender.getRouter()` / `getMethod()` / `getRouterData()` 可用。 | 当前同样可用；推荐正文档使用 `getRouterPath()`、`getRouterMethod()`、`getRouterBody()`。 |
+| `getRouterData()` | 返回 JSON 字符串。 | 返回 JSON 字符串；需要对象时用 `getRouterBody()`。 |
+| `Cron` 构造 | `new Cron()` | `Cron()` 或兼容旧参数 `Cron(cronID=None)`。 |
+| Cron 方法 | `getCron(...)`、`delCron(...)`。 | 额外支持 `getCronByID(...)`、`deleteCron(...)`。 |
+| Python 专属别名 | 无。 | `download_adapter_file(...)`、`get_group_member_list(...)`。 |
+
+<Tip>
+  目录里的所有 Python 子页都已加入 `docs.json` 导航。Mintlify 默认只把导航页加入 MCP 搜索索引；这样 AI 检索会命中拆分后的准确页面。
+</Tip>

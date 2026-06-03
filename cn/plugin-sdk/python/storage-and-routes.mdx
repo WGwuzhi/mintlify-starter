@@ -1,0 +1,122 @@
+---
+title: "存储和路由"
+description: "在 Python 插件中使用默认存储、命名 bucket，并读取和响应 HTTP router 请求。"
+keywords: ["Python bucket", "HTTP router", "插件路由", "storage"]
+icon: "database"
+---
+
+用存储保存插件状态；用 HTTP 路由把插件变成一个简单处理函数。路由声明写在 manifest headers 中，存储函数直接从 `middleware.py` 导入。
+
+## 默认存储
+
+默认存储使用全局 bucket `otto`，适合保存少量插件状态。
+
+```python
+from middleware import get, set, delete
+
+set("last_user", "10001")
+user = get("last_user")
+delete("last_user")
+```
+
+| 函数 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `get(key)` | 读取默认存储。 | `key`：必填。 | `str`；不存在返回空字符串。 |
+| `set(key, value)` | 写入默认存储。 | `key`：必填；`value` 会按字符串保存。 | `bool` |
+| `delete(key)` | 删除默认存储键。 | `key`：必填。 | `bool` |
+
+<Warning>
+  Python 关键字 `del` 不能作为普通函数名调用。SDK 里保留了 `del_ = delete` 和运行时兼容别名；新插件请直接使用 `delete(...)`。
+</Warning>
+
+## bucket 名称规则
+
+`bucket` 是存储命名空间。名称里的 `.` 表示子级 bucket，例如 `shop.orders` 表示 `shop` 下的 `orders`。运行时最多允许 3 级 bucket，推荐你也最多使用 3 级，避免权限配置、数据迁移和排查问题时层级过深。
+
+<ParamField path="bucket" type="str" required>
+  bucket 名称。不能为空；用 `.` 分隔层级；每一段都不能为空；最多 3 级。示例：`my_plugin`、`my_plugin.users`、`my_plugin.orders.paid`。
+</ParamField>
+
+<Tip>
+  推荐用 `插件名.业务域.状态` 命名，例如 `card_claim.users`、`card_claim.inventory.active`。如果只是小插件，使用一级 bucket，例如 `my_plugin`。
+</Tip>
+
+| bucket 名称 | 级别 | 建议 | 说明 |
+|---|---:|---|---|
+| `my_plugin` | 1 | 推荐 | 适合简单配置和少量状态。 |
+| `my_plugin.users` | 2 | 推荐 | 适合按业务域拆分用户、订单、缓存。 |
+| `my_plugin.orders.paid` | 3 | 可用 | 已到推荐上限，适合确实需要细分的状态。 |
+| `my_plugin.orders.paid.2026` | 4 | 不可用 | 超过运行时最大层级。 |
+| `my_plugin..users` | 无效 | 不可用 | 中间段为空。 |
+
+## 命名 bucket
+
+命名 bucket 适合把插件状态按插件名或业务域隔离。bucket 负责隔离命名空间，`key` 负责定位具体记录。
+
+```python
+import json
+from middleware import bucketGet, bucketSet, bucketAllKeys, bucketAll
+
+config = {"enabled": True, "limit": 10}
+bucketSet("my_plugin.config", "runtime", json.dumps(config, ensure_ascii=False))
+bucketSet("my_plugin.users", "10001", json.dumps({"claimed": True}, ensure_ascii=False))
+
+raw = bucketGet("my_plugin.config", "runtime")
+parsed = json.loads(raw) if raw else {}
+
+keys = bucketAllKeys("my_plugin.users")
+all_values = bucketAll("my_plugin.users")
+```
+
+| 函数 / Sender 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `bucketGet(bucket, key)` | 读取指定 bucket 的键。 | `bucket`、`key` 必填。 | `str`；不存在返回空字符串。 |
+| `bucketSet(bucket, key, value)` | 写入指定 bucket。 | `value` 会按字符串保存。 | `bool` |
+| `bucketDel(bucket, key)` | 删除指定 bucket 的键。 | `bucket`、`key` 必填。 | `bool` |
+| `bucketKeys(bucket=None, value=None)` | 获取指定 bucket 中值等于 `value` 的 keys；不传 `bucket` 时使用 `otto`。 | 可选。 | `list[str]` |
+| `bucketAllKeys(bucket)` | 获取指定 bucket 的全部 keys。 | `bucket` 必填。 | `list[str]` |
+| `bucketAll(bucket)` | 获取指定 bucket 的全部 key-value。 | `bucket` 必填。 | `dict[str, str]` |
+
+`Sender` 也提供同名 bucket 方法，适合想把调用绑定到当前会话上下文的场景。
+
+## HTTP 路由请求
+
+在 manifest 中声明 `router` 和 `method` 后，可以用 `Sender` 读取请求并响应。
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Route demo]
+#[router: /demo/{id}]
+#[method: post]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+params = sender.getRouterParams()
+body = sender.getRouterBody()
+sender.response({"ok": True, "id": params.get("id"), "body": body})
+```
+
+| 方法 | 作用 | 返回 |
+|---|---|---|
+| `getRouterPath()` | 当前路由路径。 | `str` |
+| `getRouter()` | `getRouterPath()` 兼容别名。 | `str` |
+| `getRouterParams()` | 路由参数。 | `dict[str, str]` |
+| `getRouterMethod()` | 请求方法。 | `str` |
+| `getMethod()` | `getRouterMethod()` 兼容别名。 | `str` |
+| `getRouterHeaders()` | 请求头。 | `dict` |
+| `getRouterCookies()` | Cookie。 | `dict` |
+| `getRouterBody()` | 请求体对象或原始 JSON-like 值。 | JSON-like |
+| `getRouterData()` | `getRouterBody()` 的 JSON 字符串形式。 | `str` |
+| `response(data)` | 返回 JSON 数据。 | 运行时结果 |
+
+<Info>
+  Python 当前已经支持 `getRouter()` / `getMethod()` / `getRouterData()` 兼容别名。正文档仍推荐 `getRouterPath()`、`getRouterMethod()`、`getRouterBody()`，因为它们更准确地区分路径、方法和解析后的请求体。
+</Info>
+
+顶层函数 `getRouter()`、`getMethod()` 和 `getRouterData()` 会用当前 `getSenderID()` 创建默认 `Sender`，适合旧插件迁移；新插件优先显式创建 `Sender`。
+
+## 下一步
+
+- 主动发送存储结果：[`主动推送`](/cn/plugin-sdk/python/push)
+- 查看签名：[`Python 签名速查`](/cn/plugin-sdk/python/signatures)

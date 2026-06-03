@@ -1,0 +1,110 @@
+---
+title: "Sender 消息能力"
+description: "使用 Python Sender 读取用户和会话信息，回复文本、Markdown、媒体和 mixed 消息，并撤回消息。"
+keywords: ["Python Sender", "replyMixed", "回复媒体", "撤回消息"]
+icon: "message-circle"
+---
+
+`Sender` 绑定当前运行上下文。消息触发时，它代表当前 IM、账号、会话和用户；路由触发时，它代表当前 HTTP 请求；cron / fake 上下文不一定指向真实 IM 会话。
+
+```python
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+```
+
+## 读取消息上下文
+
+这些方法不传参数，返回当前运行上下文中的字段；不存在时通常返回空字符串、空数组或 `False`。
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `getImtype()` | 获取当前 IM 类型。cron 运行可能返回 `fake`。 | 无 | `str` |
+| `getUserID()` | 获取当前用户 ID。 | 无 | `str` |
+| `getUserName()` | 获取当前用户昵称。 | 无 | `str` |
+| `getUserAvatarUrl()` | 获取当前用户头像 URL。 | 无 | `str` |
+| `getChatID()` | 获取当前会话 ID；群聊为群 ID，私聊通常为空。 | 无 | `str` |
+| `getChatName()` | 获取当前会话名称。 | 无 | `str` |
+| `getGroupName()` | 获取群名，等同于 `getChatName()`。 | 无 | `str` |
+| `isAdmin()` | 判断当前用户是否为管理员。 | 无 | `bool` |
+| `isAI()` | 判断当前消息是否来自 AI 触发上下文。 | 无 | `bool` |
+| `getAIParam()` | 获取 AI 参数。 | 无 | `str` |
+| `getMessage()` | 获取当前消息文本。 | 无 | `str` |
+| `getMessageID()` | 获取当前消息 ID。 | 无 | `str` |
+| `getHistoryMessageIDs(number)` | 获取最近消息 ID。 | `number`：必填，期望数量。 | `list[str]` |
+| `param(index)` | 读取 `rule` 正则捕获。 | `index` 从 `1` 开始；越界返回空字符串。 | `str` |
+
+```python
+user = sender.getUserName()
+message = sender.getMessage()
+first_match = sender.param(1)
+sender.reply(f"{user} 发送了：{message}\n参数：{first_match}")
+```
+
+## 回复文本和媒体
+
+`reply*` 方法用于回复当前运行上下文：消息触发时回复当前会话；路由触发时 `reply(...)` / `replyMarkdown(...)` 可写入路由响应；cron 的 `fake` 上下文不会发送真实 IM 回复。
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `reply(text)` | 回复普通文本。 | `text`：必填。 | `SendReceipt` |
+| `replyMarkdown(markdown)` | 回复 Markdown 文本；是否渲染取决于适配器。 | `markdown`：必填。 | `SendReceipt` |
+| `replyImage(source, options=None)` | 回复图片。 | 图片 URL、路径、base64 或 data URI；`options` 可选。 | `SendReceipt` |
+| `replyVoice(source, options=None)` | 回复语音。 | 语音 URL 或路径；`options` 可选。 | `SendReceipt` |
+| `replyVideo(source, options=None)` | 回复视频。 | 视频 URL 或路径；`options` 可选。 | `SendReceipt` |
+| `replyFile(source, options=None)` | 回复文件。 | 文件 URL 或路径；`options` 可选。 | `SendReceipt` |
+| `replyMixed(items, options=None)` | 回复结构化混合消息。 | `items`：必填 mixed items。 | `SendReceipt` |
+| `returnValue(text)` | 设置运行返回值，不直接发送 IM 消息。 | `text`：必填。 | 运行时结果 |
+
+```python
+sender.reply("普通文本")
+sender.replyMarkdown("## 处理结果\n\n- 已完成")
+sender.replyImage("https://example.com/a.png")
+sender.replyVoice("./voice.wav")
+sender.replyVideo("./demo.mp4")
+sender.replyFile("./report.csv", {"filename": "report.csv", "mimeType": "text/csv"})
+sender.replyMixed([
+    {"type": "text", "text": "结果："},
+    {"type": "image", "source": "./result.png", "name": "result.png"},
+])
+```
+
+<Note>
+  `replyImage(...)` 等回复当前会话的方法不需要传 `imType`、群号或用户 ID。需要指定目标时，用 [`push(...)`](/cn/plugin-sdk/python/push) 或 `push*`。
+</Note>
+
+## MediaOptions
+
+媒体回复方法的第二个参数是可选字典。
+
+<ParamField path="options.filename" type="string">
+  文件展示名。也可写作 `fileName` 或 `file_name`。
+</ParamField>
+
+<ParamField path="options.mimeType" type="string">
+  MIME 类型。也可写作 `mime_type`。
+</ParamField>
+
+<ParamField path="options.timeout" type="number">
+  媒体请求超时时间；毫秒值会自动换算为请求超时。
+</ParamField>
+
+## 控制流程
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `setContinue()` | 允许继续匹配后续插件。 | 无 | `bool` |
+| `recallMessage(messageid)` | 撤回消息。 | `messageid`：消息 ID。 | `SendReceipt` |
+| `breakIn(content)` | 把新文本重新送入消息处理。 | `content`：必填。 | 运行时结果 |
+
+```python
+if sender.isAdmin():
+    sender.setContinue()
+else:
+    sender.reply("只有管理员可以继续执行。")
+```
+
+## 下一步
+
+- 等待用户输入：[`等待输入和支付`](/cn/plugin-sdk/python/wait-and-payment)
+- 媒体下载和事件字段：[`事件、媒体和文件`](/cn/plugin-sdk/python/media-files)

@@ -1,0 +1,99 @@
+---
+title: "Context and base types"
+description: "Import middleware.py, create Sender, and understand common return values in Python plugins."
+keywords: ["Python Sender", "getSenderID", "SendReceipt", "MediaItem"]
+icon: "circle-dot"
+---
+
+This page covers `middleware.py` imports, the `senderID` source, synchronous error handling, and common return bodies.
+
+## Import style
+
+```python
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+```
+
+`getSenderID()` reads the current runtime context ID from runtime arguments. autClaw injects runtime credentials for message triggers, route triggers, and cron / fake contexts; plugins should not build `/api/plugins/runtime` URLs manually.
+
+## Common return values
+
+### SendReceipt
+
+Text, media, and recall methods usually return a send receipt.
+
+```json
+{
+  "ok": true,
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
+  "raw": {},
+  "action": "sendText"
+}
+```
+
+Adapters may return extra fields. When checking failures, first check `receipt.get("ok") is False`. Message IDs may appear as either `message_id` or `messageid`.
+
+### FileDownloadResult
+
+`fileDownload(...)` and `downloadAdapterFile(...)` return local file information.
+
+```json
+{
+  "path": "/opt/autclaw/file/demo.png",
+  "file_path": "/opt/autclaw/file/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
+}
+```
+
+### MediaItem
+
+`sender.getMediaItems()` returns media items from the current event or the latest `listen(...)` / `input(...)` result.
+
+```python
+{
+    "type": "file",
+    "source": "...",
+    "name": "report.csv",
+    "mime_type": "text/csv",
+}
+```
+
+Pass user-uploaded file items to `downloadAdapterFile(...)`. Do not parse platform-specific raw fields manually.
+
+### WaitPaySuccess
+
+`waitPay(...)` returns a payment event object on success; it returns the string `"timeout"` on timeout and `"busy"` when another waiter is active.
+
+```json
+{
+  "payment_channel": "alipay",
+  "received_amount": "19.80",
+  "expected_amount": 19.8,
+  "amount_matched": true,
+  "order_id": "pay_demo"
+}
+```
+
+## Error handling
+
+Python SDK calls return synchronously. Runtime request failures, missing required arguments, or dependency installation failures raise `Exception`.
+
+```python
+try:
+    receipt = sender.replyImage("./result.png")
+    if receipt.get("ok") is False:
+        sender.reply("Image sending failed. Try again later.")
+except Exception as error:
+    print(error)
+    sender.reply("Processing failed. Ask an administrator to check the logs.")
+```
+
+## Next steps
+
+- Read users, chats, and reply to messages: [`Sender message capabilities`](/en/plugin-sdk/python/sender-messages)
+- View complete signatures: [`Python signatures`](/en/plugin-sdk/python/signatures)

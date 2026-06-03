@@ -1,0 +1,117 @@
+---
+title: "Tools, Cron, and group management"
+description: "Use import_module, system utilities, Cron scheduled tasks, and group management methods in Python plugins."
+keywords: ["import_module", "Cron", "group management", "notifyMasters"]
+icon: "wrench"
+---
+
+This page covers `middleware.py` dependency imports, system utility functions, runtime scheduled commands, and group management methods. Public plugins should prefer the functions listed here and avoid relying on unpublished internal actions.
+
+## `import_module(module, package="", version="", manager="")`
+
+Ensure a Python dependency is available, then return the imported module object.
+
+<ParamField path="module" type="str" required>
+  Module name passed to `importlib.import_module(...)`.
+</ParamField>
+
+<ParamField path="package" type="str">
+  Real package name. Use it when the package name differs from the import name, such as importing `PIL.Image` from the `pillow` package.
+</ParamField>
+
+<ParamField path="version" type="str">
+  Required version.
+</ParamField>
+
+<ParamField path="manager" type="str">
+  Package manager name. Python dependencies usually use `pip`; omit it to let the runtime infer the manager.
+</ParamField>
+
+```python
+from middleware import import_module
+
+requests = import_module("requests", version="2.32.3", manager="pip")
+image_module = import_module("PIL.Image", package="pillow", version="10.4.0", manager="pip")
+```
+
+The current SDK also keeps `importModule = import_module` as a compatibility alias. New Python plugins should use `import_module(...)`.
+
+<Tip>
+  Prefer declaring fixed dependencies in the manifest `dependency` field. Use `import_module(...)` for on-demand loading, dynamic versions, or old plugin compatibility. Do not call it repeatedly in hot loops.
+</Tip>
+
+## System and utility functions
+
+| Function | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `render(template, selector, jsondata)` | Render HTML/template, often to generate images. | Template, selector, data. | Render result |
+| `getActiveImtypes()` | Get enabled IM types. | None | `list[str]` |
+| `name()` | Get bot name. | None | `str` |
+| `domain()` | Get domain or public address. | None | `str` |
+| `port()` / `getPort()` | Get service port. | None | `str \| int` |
+| `machineId()` | Get machine ID. | None | `str` |
+| `version()` | Get autClaw version. | None | `str` |
+| `versionInfo()` | Get structured version information. | None | `dict` |
+| `notifyMasters(content, imtypes=[])` | Notify administrators. | Content and optional IM type list. | `int`, send count. |
+| `coffee()` | Get coffee-code activation status. | None | `bool` |
+| `spread(msg)` | Legacy promotion-link conversion entry point. | `msg`: required. | Runtime result |
+| `getHistoryMessages(imtype="")` | Get recent message history. | `imtype`: optional IM type. | Message history list |
+| `generateFromSinglePrompt(prompt)` | Legacy single-prompt generation entry point. | `prompt`: required. | `str` |
+| `printf(message)` | Print and flush output. | `message`: required. | `None` |
+
+<Warning>
+  The SDK keeps defaults like `imtypes=[]` for compatibility. In your own Python functions, prefer `None` as the default to avoid mutable default argument issues.
+</Warning>
+
+## `Cron`
+
+`Cron` manages runtime scheduled commands. It is different from manifest `cron`: manifest `cron` triggers the current plugin, while the `Cron` class adds, updates, lists, and deletes runtime scheduled commands.
+
+```python
+from middleware import Cron
+
+cron = Cron()
+items = cron.getCrons()
+added = cron.addCron("0 9 * * *", False, "daily reminder", True, None, "Daily reminder")
+
+print(items, added)
+```
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `Cron(cronID=None)` | Create the Cron helper; `cronID` is an optional legacy-compatible parameter. | Optional. | `Cron` instance |
+| `getCrons()` | Get scheduled commands created by the current runtime. | None | Scheduled command list |
+| `getCronByID(id)` | Get one scheduled command. | `id`: required. | Scheduled command or runtime result |
+| `getCron(id)` | Compatibility alias of `getCronByID(...)`. | `id`: required. | Scheduled command or runtime result |
+| `addCron(cron, isOnce=False, cmd=None, isToSelf=None, toOthers=None, memo=None, disguiseImtype=None, disguiseGroup=None, disguiseUser=None)` | Add a runtime scheduled command. | `cron` required; remaining fields optional, `None` values are omitted. | New schedule ID or runtime result |
+| `updateCron(id, cron=None, isOnce=None, cmd=None, isToSelf=None, toOthers=None, memo=None, disguiseImtype=None, disguiseGroup=None, disguiseUser=None)` | Update a runtime scheduled command. | `id` required; pass only fields to update. | Runtime result |
+| `deleteCron(id)` | Delete a runtime scheduled command. | `id`: required. | Runtime result |
+| `delCron(id)` | Compatibility alias of `deleteCron(...)`. | `id`: required. | Runtime result |
+
+<Info>
+  Current Python `addCron(...)` / `updateCron(...)` do not require every positional parameter. The method omits fields whose value is `None`. To clear a field, pass an empty string `""`.
+</Info>
+
+## Group management
+
+These methods depend on current IM adapter support. Unsupported adapters may return errors or have no effect. They return the runtime `data` value directly.
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `groupInviteIn(friend, group)` | Invite a friend into a group. | `friend`: friend ID; `group`: group ID. | Runtime result |
+| `groupKick(userid)` | Kick a group member. | `userid`: user ID. | Runtime result |
+| `groupBan(userid, timeout)` | Mute a group member. | `timeout`: mute seconds or adapter-required unit. | Runtime result |
+| `groupUnban(userid)` | Unmute a member. | `userid`: user ID. | Runtime result |
+| `groupWholeBan()` | Enable whole-group mute. | None | Runtime result |
+| `groupWholeUnban()` | Disable whole-group mute. | None | Runtime result |
+| `groupNoticeSend(notice)` | Send a group announcement. | `notice`: announcement content. | Runtime result |
+
+```python
+sender.groupBan("10001", 600)
+sender.groupNoticeSend("Maintenance tonight at 22:00. Save your work in advance.")
+```
+
+## Next steps
+
+- Push from scheduled tasks: [`Proactive push`](/en/plugin-sdk/python/push)
+- View complete signatures: [`Python signatures`](/en/plugin-sdk/python/signatures)

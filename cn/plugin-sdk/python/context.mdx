@@ -1,0 +1,99 @@
+---
+title: "上下文和基础类型"
+description: "在 Python 插件中导入 middleware.py，创建 Sender，并理解常见返回值。"
+keywords: ["Python Sender", "getSenderID", "SendReceipt", "MediaItem"]
+icon: "circle-dot"
+---
+
+本页覆盖 `middleware.py` 的导入方式、`senderID` 来源、同步错误处理和常见返回体。
+
+## 导入方式
+
+```python
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+```
+
+`getSenderID()` 从运行时参数读取当前运行上下文 ID。消息触发、路由触发、cron / fake 上下文都会由 autClaw 注入运行时凭据；插件不要自行拼接 `/api/plugins/runtime` 地址。
+
+## 常用返回值
+
+### SendReceipt
+
+文本、媒体和撤回类方法通常返回发送回执。
+
+```json
+{
+  "ok": true,
+  "message_id": "123456",
+  "messageid": "123456",
+  "message_ids": ["123456"],
+  "raw": {},
+  "action": "sendText"
+}
+```
+
+适配器可能返回额外字段。判断失败时优先检查 `receipt.get("ok") is False`，消息 ID 同时兼容 `message_id` 和 `messageid`。
+
+### FileDownloadResult
+
+`fileDownload(...)` 和 `downloadAdapterFile(...)` 返回本地文件信息。
+
+```json
+{
+  "path": "/opt/autclaw/file/demo.png",
+  "file_path": "/opt/autclaw/file/demo.png",
+  "file_name": "demo.png",
+  "mime_type": "image/png",
+  "file_size": 12345
+}
+```
+
+### MediaItem
+
+`sender.getMediaItems()` 返回当前事件或最近一次 `listen(...)` / `input(...)` 捕获到的媒体项。
+
+```python
+{
+    "type": "file",
+    "source": "...",
+    "name": "report.csv",
+    "mime_type": "text/csv",
+}
+```
+
+把用户上传的文件项传给 `downloadAdapterFile(...)`，不要手动解析平台原始字段。
+
+### WaitPaySuccess
+
+`waitPay(...)` 支付成功时返回支付事件对象；超时返回字符串 `"timeout"`，繁忙返回 `"busy"`。
+
+```json
+{
+  "payment_channel": "alipay",
+  "received_amount": "19.80",
+  "expected_amount": 19.8,
+  "amount_matched": true,
+  "order_id": "pay_demo"
+}
+```
+
+## 错误处理
+
+Python SDK 同步返回数据。运行时请求失败、必填参数为空或依赖安装失败时会抛出 `Exception`。
+
+```python
+try:
+    receipt = sender.replyImage("./result.png")
+    if receipt.get("ok") is False:
+        sender.reply("图片发送失败，请稍后重试。")
+except Exception as error:
+    print(error)
+    sender.reply("处理失败，请联系管理员查看日志。")
+```
+
+## 下一步
+
+- 读取用户、会话和回复消息：[`Sender 消息能力`](/cn/plugin-sdk/python/sender-messages)
+- 查看完整签名：[`Python 签名速查`](/cn/plugin-sdk/python/signatures)

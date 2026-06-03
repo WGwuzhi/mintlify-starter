@@ -1,0 +1,109 @@
+---
+title: "Wait for input and payment"
+description: "Use listen, input, and waitPay in Python plugins to wait for user input, capture media, and handle payment amount matching."
+keywords: ["Python listen", "input", "waitPay", "wait for payment"]
+icon: "hourglass"
+---
+
+`listen(...)`, `input(...)`, and `waitPay(...)` block the current plugin run until a matching event arrives, the wait times out, or the user sends an exit code. Payment plugins should handle timeout, cancellation, and amount mismatch explicitly.
+
+## `listen(waitTime, recallTime=0, scope="")`
+
+Wait for the next user input in the same chat and account. Timeout returns an empty string `""`.
+
+<ParamField path="waitTime" type="int" required>
+  Wait time in milliseconds. The runtime normalizes this value: default `60000` ms, minimum `1000` ms, and usually maximum `900000` ms.
+</ParamField>
+
+<ParamField path="recallTime" type="int | 'group'" default="0">
+  Milliseconds to delay recalling the received user message. If the second argument is `'group'`, the SDK treats it as `scope` and sets `recallTime` to `0`.
+</ParamField>
+
+<ParamField path="scope" type="'group' | str">
+  Pass `'group'` to allow any member in the same group to answer. Omit it to wait only for the current user.
+</ParamField>
+
+```python
+sender.reply("Send the verification code within 60 seconds")
+code = sender.listen(60000)
+
+if not code:
+    sender.reply("Timed out. Start again.")
+else:
+    sender.reply(f"Received: {code}")
+```
+
+## `input(waitTime, recallTime=0, scope="")`
+
+`input(...)` is an alias of `listen(...)` with the same parameters and return value.
+
+```python
+sender.reply("Any group member can reply y within 60 seconds to confirm")
+answer = sender.input(60000, 0, "group")
+
+if answer != "y":
+    sender.reply("Not confirmed.")
+```
+
+If the waited message contains media, `input(...)` returns text content; read media from `sender.getMediaItems()`.
+
+```python
+from middleware import downloadAdapterFile
+
+sender.reply("Send a CSV file")
+text = sender.input(60000)
+items = sender.getMediaItems()
+csv = next((item for item in items if item.get("type") == "file"), None)
+
+if not csv:
+    sender.reply(f"No file received. Text: {text or 'empty'}")
+else:
+    saved = downloadAdapterFile(csv, {"path": "imports"})
+    sender.reply(f"Saved: {saved.get('file_name')}, size: {saved.get('file_size')} bytes")
+```
+
+## `waitPay(exitcode, timeout, amount=None)`
+
+Wait for a payment event or exit code. It registers the payment wait with the current runtime IM, account, chat, and user. If payment configuration is unavailable, it falls back to legacy payment-event waiting.
+
+<ParamField path="exitcode" type="str" required>
+  Exit code. During the wait, the exact same user text returns this string and ends the wait. Pass an empty string to disable user cancellation.
+</ParamField>
+
+<ParamField path="timeout" type="int" required>
+  Wait time in milliseconds. The runtime normalizes it with the input wait limit, usually maximum `900000` ms.
+</ParamField>
+
+<ParamField path="amount" type="str | int | float">
+  Expected amount. When passed, the returned payment object includes `expected_amount` and `amount_matched`.
+</ParamField>
+
+```python
+sender.reply("Pay 19.8. Delivery starts after payment. Send q to cancel.")
+result = sender.waitPay("q", 300000, 19.8)
+
+if result == "timeout":
+    sender.reply("Payment timed out. Place a new order.")
+elif result == "q":
+    sender.reply("Canceled.")
+elif result == "busy":
+    sender.reply("A payment waiter is already active. Try again later.")
+elif isinstance(result, dict) and result.get("amount_matched") is False:
+    sender.reply("Payment received, but the amount does not match. Contact an administrator.")
+elif isinstance(result, dict):
+    sender.reply("Payment succeeded. Starting delivery.")
+```
+
+## `atWaitPay()`
+
+`atWaitPay()` returns whether the current run is waiting for payment.
+
+```python
+if sender.atWaitPay():
+    sender.reply("Waiting for payment. Finish or cancel the current order first.")
+```
+
+## Next steps
+
+- Download files received while waiting: [`Events, media, and files`](/en/plugin-sdk/python/media-files)
+- Push payment notices proactively: [`Proactive push`](/en/plugin-sdk/python/push)

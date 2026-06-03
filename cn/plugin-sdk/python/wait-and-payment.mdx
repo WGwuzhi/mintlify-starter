@@ -1,0 +1,109 @@
+---
+title: "等待输入和支付"
+description: "在 Python 插件中使用 listen、input 和 waitPay 等待用户输入、捕获媒体和处理支付金额匹配。"
+keywords: ["Python listen", "input", "waitPay", "等待支付"]
+icon: "hourglass"
+---
+
+`listen(...)`、`input(...)` 和 `waitPay(...)` 会阻塞当前插件运行，直到收到匹配事件、超时或用户发送退出口令。支付类插件建议显式处理超时、取消和金额不匹配。
+
+## `listen(waitTime, recallTime=0, scope="")`
+
+等待同一会话、同一账号下的下一条用户输入。超时返回空字符串 `""`。
+
+<ParamField path="waitTime" type="int" required>
+  等待时间，单位毫秒。运行时会归一化：默认 `60000` ms，最小 `1000` ms，最大通常为 `900000` ms。
+</ParamField>
+
+<ParamField path="recallTime" type="int | 'group'" default="0">
+  收到输入后延迟撤回用户消息的毫秒数。若第二个参数直接传 `'group'`，SDK 会把它识别为 `scope`，并把 `recallTime` 置为 `0`。
+</ParamField>
+
+<ParamField path="scope" type="'group' | str">
+  传 `'group'` 时，允许同群任意成员回答；不传时只等待当前用户。
+</ParamField>
+
+```python
+sender.reply("请在 60 秒内发送验证码")
+code = sender.listen(60000)
+
+if not code:
+    sender.reply("已超时，请重新开始。")
+else:
+    sender.reply(f"收到：{code}")
+```
+
+## `input(waitTime, recallTime=0, scope="")`
+
+`input(...)` 是 `listen(...)` 的别名，参数和返回值一致。
+
+```python
+sender.reply("请群内任意成员在 60 秒内确认，回复 y")
+answer = sender.input(60000, 0, "group")
+
+if answer != "y":
+    sender.reply("未确认。")
+```
+
+如果等待到的是带媒体的消息，`input(...)` 返回文本内容；媒体从 `sender.getMediaItems()` 读取。
+
+```python
+from middleware import downloadAdapterFile
+
+sender.reply("请发送一个 CSV 文件")
+text = sender.input(60000)
+items = sender.getMediaItems()
+csv = next((item for item in items if item.get("type") == "file"), None)
+
+if not csv:
+    sender.reply(f"没有收到文件，收到文本：{text or '空'}")
+else:
+    saved = downloadAdapterFile(csv, {"path": "imports"})
+    sender.reply(f"已保存：{saved.get('file_name')}，大小：{saved.get('file_size')} bytes")
+```
+
+## `waitPay(exitcode, timeout, amount=None)`
+
+等待支付事件或退出口令。它会使用当前运行上下文里的 IM、账号、会话和用户来注册支付等待；如果支付配置不可用，会退化为 legacy 等待支付事件。
+
+<ParamField path="exitcode" type="str" required>
+  退出口令。等待期间用户发送完全相同文本时，方法返回该字符串并结束等待。传空字符串时表示不启用用户退出口令。
+</ParamField>
+
+<ParamField path="timeout" type="int" required>
+  等待时间，单位毫秒。运行时会按输入等待上限归一化，通常最大 `900000` ms。
+</ParamField>
+
+<ParamField path="amount" type="str | int | float">
+  期望金额。传入后，返回的支付对象会包含 `expected_amount` 和 `amount_matched`。
+</ParamField>
+
+```python
+sender.reply("请支付 19.8 元，支付后自动发货；发送 q 取消。")
+result = sender.waitPay("q", 300000, 19.8)
+
+if result == "timeout":
+    sender.reply("支付超时，请重新下单。")
+elif result == "q":
+    sender.reply("已取消。")
+elif result == "busy":
+    sender.reply("当前已有支付等待，请稍后再试。")
+elif isinstance(result, dict) and result.get("amount_matched") is False:
+    sender.reply("已收到支付，但金额不匹配，请联系管理员处理。")
+elif isinstance(result, dict):
+    sender.reply("支付成功，开始发货。")
+```
+
+## `atWaitPay()`
+
+`atWaitPay()` 返回当前运行是否处于支付等待状态。
+
+```python
+if sender.atWaitPay():
+    sender.reply("正在等待支付，请先完成或取消当前订单。")
+```
+
+## 下一步
+
+- 下载等待中收到的文件：[`事件、媒体和文件`](/cn/plugin-sdk/python/media-files)
+- 主动发送支付通知：[`主动推送`](/cn/plugin-sdk/python/push)

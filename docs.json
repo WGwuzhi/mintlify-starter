@@ -80,7 +80,23 @@
                     ],
                     "icon": "braces"
                   },
-                  "cn/plugin-sdk/python",
+                  {
+                    "group": "Python 中间件",
+                    "root": "cn/plugin-sdk/python",
+                    "directory": "card",
+                    "expanded": true,
+                    "pages": [
+                      "cn/plugin-sdk/python/context",
+                      "cn/plugin-sdk/python/sender-messages",
+                      "cn/plugin-sdk/python/wait-and-payment",
+                      "cn/plugin-sdk/python/media-files",
+                      "cn/plugin-sdk/python/storage-and-routes",
+                      "cn/plugin-sdk/python/push",
+                      "cn/plugin-sdk/python/tools-cron-group",
+                      "cn/plugin-sdk/python/signatures"
+                    ],
+                    "icon": "code"
+                  },
                   "cn/plugin-sdk/media"
                 ],
                 "icon": "puzzle"
@@ -154,7 +170,23 @@
                     ],
                     "icon": "braces"
                   },
-                  "en/plugin-sdk/python",
+                  {
+                    "group": "Python middleware",
+                    "root": "en/plugin-sdk/python",
+                    "directory": "card",
+                    "expanded": true,
+                    "pages": [
+                      "en/plugin-sdk/python/context",
+                      "en/plugin-sdk/python/sender-messages",
+                      "en/plugin-sdk/python/wait-and-payment",
+                      "en/plugin-sdk/python/media-files",
+                      "en/plugin-sdk/python/storage-and-routes",
+                      "en/plugin-sdk/python/push",
+                      "en/plugin-sdk/python/tools-cron-group",
+                      "en/plugin-sdk/python/signatures"
+                    ],
+                    "icon": "code"
+                  },
                   "en/plugin-sdk/media"
                 ],
                 "icon": "puzzle"

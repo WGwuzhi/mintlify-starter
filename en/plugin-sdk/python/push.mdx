@@ -1,0 +1,117 @@
+---
+title: "Proactive push"
+description: "Use Python push, pushImage, and pushMixed to proactively send text, media, and mixed messages, and choose the sending account."
+keywords: ["Python proactive push", "pushMixed", "pushImage", "account_id"]
+icon: "send"
+---
+
+Proactive push does not depend on the reply target of `Sender`. You need to specify the target IM, group, or user. For group push, pass `groupCode`; for private push, pass `userID`.
+
+## Function overview
+
+| Function | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `push(imType, groupCode, userID, title, content, options=None, timeout=None)` | Push text. | `imType`: required; `groupCode`: group ID, pass `""` for private chat; `userID`: user ID, pass `""` for group push; `title`: title or fallback text; `content`: text. | `int`, number of successfully sent targets, usually `0` or `1`. |
+| `pushImage(imType, groupCode, userID, title, imageUrl, options=None, timeout=None)` | Push an image. | First four parameters are the same; `imageUrl`: image source; `options`: optional media parameters. | `int` |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl, options=None, timeout=None)` | Push voice/audio. | `voiceUrl`: voice source; `options`: optional media parameters. | `int` |
+| `pushVideo(imType, groupCode, userID, title, videoUrl, options=None, timeout=None)` | Push a video. | `videoUrl`: video source; `options`: optional media parameters. | `int` |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options=None, timeout=None)` | Push a file. | `fileUrl`: file source; `options` can pass account, filename, and MIME type. | `int` |
+| `pushMixed(imType, groupCode, userID, title, items, options=None, timeout=None)` | Push a mixed message. | `items`: mixed items; `options`: optional account parameters. | `int` |
+
+## `push(...)`
+
+<ParamField path="imType" type="str" required>
+  Target IM type, such as `qq`, `weixin`, or `qx`, depending on enabled adapters.
+</ParamField>
+
+<ParamField path="groupCode" type="str" required>
+  Group ID. Required for group push; pass an empty string for private push.
+</ParamField>
+
+<ParamField path="userID" type="str" required>
+  User ID. Required for private push; can be empty for group push.
+</ParamField>
+
+<ParamField path="options.account_id" type="str">
+  Target account ID. Also accepted as `accountID` or `accountId`. Explicit values have highest priority.
+</ParamField>
+
+<ParamField path="timeout" type="int">
+  Request timeout. Pass milliseconds.
+</ParamField>
+
+```python
+from middleware import push
+
+sent = push("qq", "123456", "", "Daily report", "Today's tasks are complete", {
+    "account_id": "bot_qq_ops",
+})
+
+if sent == 0:
+    print("Not sent: check target, adapter status, or whether the account is online")
+```
+
+## Push account selection
+
+These rules apply to `push(...)`, `pushImage(...)`, `pushVoice(...)`, `pushVideo(...)`, `pushFile(...)`, and `pushMixed(...)`.
+
+Selection rules:
+
+1. If `options` contains `account_id`, use it.
+2. If this is a message trigger and the target IM is the same as the current chat IM, use the current chat account by default.
+3. If this is cron / fake, use the target IM default account.
+4. For cross-IM push, use the target IM default account.
+5. If the target IM has no default account, the runtime chooses the first online account that can send. If no account can send, it returns `0` or raises an adapter offline error.
+
+<Tip>
+  When you know the sending account, pass `options.account_id` explicitly. It is more stable than depending on the current chat account or target IM default account.
+</Tip>
+
+## Media push
+
+```python
+from middleware import pushImage, pushVoice, pushVideo, pushFile, pushMixed
+
+pushImage("qq", "123456", "", "Daily image", "./daily.png", {
+    "account_id": "bot_qq_ops",
+})
+pushVoice("qq", "123456", "", "Voice reminder", "./notice.wav", {
+    "accountId": "bot_qq_ops",
+}, 15000)
+pushVideo("qq", "123456", "", "Demo video", "./demo.mp4", {
+    "account_id": "bot_qq_ops",
+})
+pushFile("qq", "123456", "", "Daily file", "./daily.csv", {
+    "account_id": "bot_qq_ops",
+    "filename": "daily.csv",
+    "mimeType": "text/csv",
+})
+pushMixed("qq", "123456", "", "Result", [
+    {"type": "text", "text": "Result:"},
+    {"type": "image", "source": "./result.png"},
+], {
+    "account_id": "bot_qq_ops",
+})
+```
+
+<Tip>
+  All proactive push helpers support `options` and `timeout`. Use `options.account_id` / `accountID` / `accountId` to choose the sending account explicitly. Use `filename` / `fileName` / `file_name` and `mimeType` / `mime_type` to add media metadata.
+</Tip>
+
+## Return value
+
+Proactive push returns the number of successfully sent targets, usually `0` or `1`. If the adapter returns an error, the SDK raises `Exception`.
+
+```python
+try:
+    sent = push("qq", "123456", "", "Notice", "Task complete")
+    if sent == 0:
+        print("No available account or target unreachable")
+except Exception as error:
+    print(error)
+```
+
+## Next steps
+
+- Media source formats: [`Media sending`](/en/plugin-sdk/media)
+- Push from scheduled tasks: [`Tools, Cron, and group management`](/en/plugin-sdk/python/tools-cron-group)

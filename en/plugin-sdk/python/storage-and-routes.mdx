@@ -1,0 +1,122 @@
+---
+title: "Storage and routes"
+description: "Use default storage, named buckets, and HTTP router request and response helpers in Python plugins."
+keywords: ["Python bucket", "HTTP router", "plugin route", "storage"]
+icon: "database"
+---
+
+Use storage to save plugin state. Use HTTP routes to turn a plugin into a small request handler. Route declarations live in manifest headers; storage functions are imported from `middleware.py`.
+
+## Default storage
+
+Default storage uses the global `otto` bucket and is suitable for small plugin state.
+
+```python
+from middleware import get, set, delete
+
+set("last_user", "10001")
+user = get("last_user")
+delete("last_user")
+```
+
+| Function | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `get(key)` | Read default storage. | `key`: required. | `str`; missing keys return an empty string. |
+| `set(key, value)` | Write default storage. | `key`: required; `value` is stored as a string. | `bool` |
+| `delete(key)` | Delete a default storage key. | `key`: required. | `bool` |
+
+<Warning>
+  `del` is a Python keyword and cannot be called as a normal function name. The SDK keeps `del_ = delete` and a runtime compatibility alias. New plugins should use `delete(...)`.
+</Warning>
+
+## bucket naming rules
+
+`bucket` is a storage namespace. A `.` means a child bucket. For example, `shop.orders` means `orders` under `shop`. The runtime allows up to 3 bucket levels. Prefer at most 3 levels to avoid deep permission configuration, migrations, and troubleshooting.
+
+<ParamField path="bucket" type="str" required>
+  Bucket name. It cannot be empty; use `.` to separate levels; each segment must be non-empty; maximum 3 levels. Examples: `my_plugin`, `my_plugin.users`, `my_plugin.orders.paid`.
+</ParamField>
+
+<Tip>
+  Prefer `plugin_name.domain.status`, such as `card_claim.users` or `card_claim.inventory.active`. For small plugins, use one level, such as `my_plugin`.
+</Tip>
+
+| Bucket name | Levels | Recommendation | Notes |
+|---|---:|---|---|
+| `my_plugin` | 1 | Recommended | Simple config and small state. |
+| `my_plugin.users` | 2 | Recommended | Split users, orders, cache, or other domains. |
+| `my_plugin.orders.paid` | 3 | Usable | Reaches the recommended maximum. |
+| `my_plugin.orders.paid.2026` | 4 | Invalid | Exceeds runtime maximum depth. |
+| `my_plugin..users` | Invalid | Invalid | Empty middle segment. |
+
+## Named buckets
+
+Named buckets isolate plugin state by plugin or business domain. The bucket isolates the namespace; the key locates a record.
+
+```python
+import json
+from middleware import bucketGet, bucketSet, bucketAllKeys, bucketAll
+
+config = {"enabled": True, "limit": 10}
+bucketSet("my_plugin.config", "runtime", json.dumps(config, ensure_ascii=False))
+bucketSet("my_plugin.users", "10001", json.dumps({"claimed": True}, ensure_ascii=False))
+
+raw = bucketGet("my_plugin.config", "runtime")
+parsed = json.loads(raw) if raw else {}
+
+keys = bucketAllKeys("my_plugin.users")
+all_values = bucketAll("my_plugin.users")
+```
+
+| Function / Sender method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `bucketGet(bucket, key)` | Read a key from a bucket. | `bucket` and `key` required. | `str`; missing keys return an empty string. |
+| `bucketSet(bucket, key, value)` | Write a key to a bucket. | `value` is stored as a string. | `bool` |
+| `bucketDel(bucket, key)` | Delete a key from a bucket. | `bucket` and `key` required. | `bool` |
+| `bucketKeys(bucket=None, value=None)` | Get keys whose value equals `value`; omitted `bucket` uses `otto`. | Optional. | `list[str]` |
+| `bucketAllKeys(bucket)` | Get all keys in a bucket. | `bucket` required. | `list[str]` |
+| `bucketAll(bucket)` | Get all key-value pairs in a bucket. | `bucket` required. | `dict[str, str]` |
+
+`Sender` provides bucket methods with the same names. Use them when you want the call tied to the current conversation context.
+
+## HTTP route requests
+
+After declaring `router` and `method` in the manifest, use `Sender` to read the request and respond.
+
+```python
+#[author: your-name]
+#[runtime: python@3.12]
+#[title: Route demo]
+#[router: /demo/{id}]
+#[method: post]
+from middleware import Sender, getSenderID
+
+sender = Sender(getSenderID())
+params = sender.getRouterParams()
+body = sender.getRouterBody()
+sender.response({"ok": True, "id": params.get("id"), "body": body})
+```
+
+| Method | Purpose | Returns |
+|---|---|---|
+| `getRouterPath()` | Current route path. | `str` |
+| `getRouter()` | Compatibility alias of `getRouterPath()`. | `str` |
+| `getRouterParams()` | Route parameters. | `dict[str, str]` |
+| `getRouterMethod()` | Request method. | `str` |
+| `getMethod()` | Compatibility alias of `getRouterMethod()`. | `str` |
+| `getRouterHeaders()` | Request headers. | `dict` |
+| `getRouterCookies()` | Cookies. | `dict` |
+| `getRouterBody()` | Request body object or raw JSON-like value. | JSON-like |
+| `getRouterData()` | JSON string form of `getRouterBody()`. | `str` |
+| `response(data)` | Return JSON data. | Runtime result |
+
+<Info>
+  Python currently supports `getRouter()` / `getMethod()` / `getRouterData()` compatibility aliases. This documentation still recommends `getRouterPath()`, `getRouterMethod()`, and `getRouterBody()` because they describe the path, method, and parsed request body more precisely.
+</Info>
+
+Top-level `getRouter()`, `getMethod()`, and `getRouterData()` create a default `Sender` from the current `getSenderID()`. They are useful for migrating old plugins; new plugins should create `Sender` explicitly.
+
+## Next steps
+
+- Push stored results proactively: [`Proactive push`](/en/plugin-sdk/python/push)
+- View signatures: [`Python signatures`](/en/plugin-sdk/python/signatures)

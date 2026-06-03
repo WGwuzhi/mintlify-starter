@@ -1,0 +1,89 @@
+---
+title: "事件、媒体和文件"
+description: "在 Python 插件中读取事件数据、获取媒体项、下载用户上传文件，并获取群成员列表。"
+keywords: ["getMediaItems", "downloadAdapterFile", "fileDownload", "群成员列表"]
+icon: "file-down"
+---
+
+本页覆盖事件字段、`sender.getMediaItems()`、文件下载和群成员列表。处理用户上传文件时，优先用标准化 `MediaItem`，不要手动拼平台下载地址。
+
+## 事件方法
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `getPluginName()` | 获取当前插件标题；无标题时返回插件名。 | 无 | `str` |
+| `getPluginVersion()` | 获取当前插件版本。 | 无 | `str` |
+| `getEventType()` | 获取当前事件类型。 | 无 | `str` |
+| `setEventType(eventType)` | 设置当前运行上下文的事件类型。 | `eventType`：必填。 | `bool` |
+| `getEventData()` | 获取当前事件数据。不存在时返回 `{}`。 | 无 | JSON-like |
+| `setEventData(eventData)` | 设置当前事件数据。 | `eventData`：任意 JSON-like 数据。 | `bool` |
+| `getMediaItems()` | 获取当前事件或最近一次等待输入捕获到的媒体项。 | 无 | `list[dict]` |
+
+```python
+event_type = sender.getEventType()
+event_data = sender.getEventData()
+sender.setEventData({"handled": True, "source": event_type, "raw": event_data})
+```
+
+## `getMediaItems()`
+
+`getMediaItems()` 优先返回最近一次 `listen(...)` / `input(...)` 捕获到的媒体；没有等待输入媒体时，返回当前事件数据里的 `media_items` / `mediaItems`。
+
+```python
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+image_item = next((item for item in items if item.get("type") == "image"), None)
+```
+
+## `fileDownload(url, path=None)`
+
+下载远程 URL、`base64://...` 或 data URI 到本地文件目录。
+
+```python
+from middleware import fileDownload
+
+saved = fileDownload("https://example.com/a.png", "images")
+sender.replyImage(saved["path"])
+```
+
+## `downloadAdapterFile(file, options=None, timeout=None)`
+
+下载适配器收到的文件项。`file` 可以直接使用 `sender.getMediaItems()` 返回的 `MediaItem`。
+
+```python
+from middleware import downloadAdapterFile
+
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+
+if file_item:
+    saved = downloadAdapterFile(file_item, {"path": "imports"}, 30000)
+    sender.reply(f"已保存：{saved.get('file_name')}")
+else:
+    sender.reply("没有收到文件。")
+```
+
+`download_adapter_file(...)` 是 `downloadAdapterFile(...)` 的 Python 别名。
+
+## `getGroupMemberList(group_id_or_options=None, options=None, timeout=None)`
+
+获取群成员列表。可以传群 ID，也可以传 options 字典。
+
+```python
+from middleware import getGroupMemberList
+
+members = getGroupMemberList("123456", {
+    "imType": "qq",
+    "account_id": "bot_qq_ops",
+})
+
+for member in members.get("members", []):
+    print(member.get("user_id"), member.get("display_name") or member.get("nickname"))
+```
+
+`get_group_member_list(...)` 是 `getGroupMemberList(...)` 的 Python 别名。
+
+## 下一步
+
+- 媒体来源和 mixed 写法：[`Media sending`](/cn/plugin-sdk/media)
+- 存储下载结果：[`存储和路由`](/cn/plugin-sdk/python/storage-and-routes)

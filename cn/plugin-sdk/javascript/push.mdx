@@ -12,11 +12,11 @@ icon: "send"
 | 函数 | 作用 | 参数 | 返回 |
 |---|---|---|---|
 | `push(imType, groupCode, userID, title, content, options?, timeout?)` | 推送文本。 | `imType`：必填；`groupCode`：群 ID，私聊传 `''`；`userID`：用户 ID，群推送传 `''`；`title`：标题或备用文本；`content`：文本；`options`：可选；`timeout`：可选毫秒。 | `Promise<number>`，成功发送的目标数，通常是 `0` 或 `1`。 |
-| `pushImage(imType, groupCode, userID, title, imageUrl)` | 推送图片。 | 前四项同上；`imageUrl`：必填图片来源。 | `Promise<number>` |
-| `pushVoice(imType, groupCode, userID, title, voiceUrl)` | 推送语音。 | `voiceUrl`：必填语音来源。 | `Promise<number>` |
-| `pushVideo(imType, groupCode, userID, title, videoUrl)` | 推送视频。 | `videoUrl`：必填视频来源。 | `Promise<number>` |
-| `pushFile(imType, groupCode, userID, title, fileUrl, options?)` | 推送文件。 | `fileUrl`：必填文件来源；`options` 可传文件名和 MIME 类型。当前 helper 不会把 `account_id` 透传到顶层。 | `Promise<number>` |
-| `pushMixed(imType, groupCode, userID, title, items)` | 推送混合消息。 | `items`：必填 mixed items。 | `Promise<number>` |
+| `pushImage(imType, groupCode, userID, title, imageUrl, options?, timeout?)` | 推送图片。 | 前四项同上；`imageUrl`：必填图片来源；`options`：可选媒体参数；`timeout`：可选毫秒。 | `Promise<number>` |
+| `pushVoice(imType, groupCode, userID, title, voiceUrl, options?, timeout?)` | 推送语音。 | `voiceUrl`：必填语音来源；`options`：可选媒体参数；`timeout`：可选毫秒。 | `Promise<number>` |
+| `pushVideo(imType, groupCode, userID, title, videoUrl, options?, timeout?)` | 推送视频。 | `videoUrl`：必填视频来源；`options`：可选媒体参数；`timeout`：可选毫秒。 | `Promise<number>` |
+| `pushFile(imType, groupCode, userID, title, fileUrl, options?, timeout?)` | 推送文件。 | `fileUrl`：必填文件来源；`options` 可传账号、文件名和 MIME 类型；`timeout`：可选毫秒。 | `Promise<number>` |
+| `pushMixed(imType, groupCode, userID, title, items, options?, timeout?)` | 推送混合消息。 | `items`：必填 mixed items；`options`：可选账号参数；`timeout`：可选毫秒。 | `Promise<number>` |
 
 ## `push(imType, groupCode, userID, title, content, options?, timeout?)`
 
@@ -66,9 +66,11 @@ if (sent === 0) {
 
 ## 推送账号选择
 
+以下规则适用于 `push(...)`、`pushImage(...)`、`pushVoice(...)`、`pushVideo(...)`、`pushFile(...)` 和 `pushMixed(...)`。
+
 选择规则：
 
-1. 对 `push(...)`，如果 `options` 中有 `account_id`，使用它。
+1. 如果 `options` 中有 `account_id`，使用它。
 2. 如果是消息触发，并且目标 IM 与当前会话 IM 一致，默认使用当前会话账号。
 3. 如果是 cron / fake，使用目标 IM 的默认账号。
 4. 如果跨 IM 推送，使用目标 IM 的默认账号。
@@ -97,22 +99,31 @@ await push('weixin', '', 'wxid_user', '通知', '处理完成')
 ## 媒体推送
 
 ```js
-await pushImage('qq', '123456', '', '日报图片', './daily.png')
-await pushVoice('qq', '123456', '', '语音提醒', './notice.wav')
-await pushVideo('qq', '123456', '', '演示视频', './demo.mp4')
+await pushImage('qq', '123456', '', '日报图片', './daily.png', {
+  account_id: 'bot_qq_ops',
+})
+await pushVoice('qq', '123456', '', '语音提醒', './notice.wav', {
+  accountId: 'bot_qq_ops',
+}, 15000)
+await pushVideo('qq', '123456', '', '演示视频', './demo.mp4', {
+  account_id: 'bot_qq_ops',
+})
 await pushFile('qq', '123456', '', '日报文件', './daily.csv', {
+  account_id: 'bot_qq_ops',
   filename: 'daily.csv',
   mimeType: 'text/csv',
 })
 await pushMixed('qq', '123456', '', '处理结果', [
   { type: 'text', text: '结果如下：' },
   { type: 'image', source: './result.png' },
-])
+], {
+  account_id: 'bot_qq_ops',
+})
 ```
 
-<Warning>
-  `pushImage(...)`、`pushVoice(...)`、`pushVideo(...)` 和 `pushFile(...)` 当前 JS helper 不暴露顶层 `account_id` 参数。`pushFile(...)` 的 `options` 只用于构造 `media`，不会成为顶层账号字段。`pushMixed(...)` 的 helper 不声明 `options` 参数；不要假设它能像 `push(...)` 一样显式选择账号。需要强制账号推送媒体时，优先先用 `push(...)` 发送文本通知；确需底层能力时，再评估用 `accessService('/pushImage', ...)` 自行传顶层 `account_id` 的版本兼容性。
-</Warning>
+<Tip>
+  媒体推送 helper 也支持 `options` 和 `timeout`。`options.account_id` / `accountID` / `accountId` 可显式指定发送账号；`filename` / `fileName` / `file_name` 与 `mimeType` / `mime_type` 用于补充媒体元数据。
+</Tip>
 
 ## 返回值
 

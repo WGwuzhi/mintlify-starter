@@ -105,11 +105,6 @@ const marketHook = importJs('specter:hook.js')
 | `spread(msg)` | Legacy promotion-link conversion entry point. Returns an empty string when the related capability is not configured. | `msg`: required. | `Promise<string>` |
 | `getHistoryMessages(imtype?)` | Get recent message history. | `imtype`: optional IM type. | `Promise<any[]>` |
 | `generateFromSinglePrompt(prompt)` | Legacy single-prompt generation entry point. The current runtime may return an empty string. | `prompt`: required. | `Promise<string>` |
-| `accessService(path, body?, timeout?)` | Call runtime compatibility APIs. | `path`: required internal action path; `body`: optional; `timeout`: optional milliseconds. | `Promise<any>` |
-
-<Warning>
-  `accessService(...)` is a low-level compatibility entry point. Public plugins should prefer the methods explicitly listed on this page and avoid relying on unpublished internal actions.
-</Warning>
 
 ## `Cron`
 
@@ -123,18 +118,18 @@ const { Cron } = require('./middleware.js')
 
 const cron = new Cron()
 const items = await cron.getCrons()
-cron.addCron('0 9 * * *', false, 'daily reminder', true, null, 'Daily reminder')
+const added = await cron.addCron('0 9 * * *', false, 'daily reminder', true, null, 'Daily reminder')
 
-console.log(items)
+console.log(items, added)
 ```
 
 | Method | Purpose | Parameters | Returns |
 |---|---|---|---|
 | `getCrons()` | Get the list of scheduled commands created by the current runtime. | None | `Promise<RuntimeCronItem[]>` |
 | `getCron(id)` | The current helper requests the runtime cron list with `id`; the actual runtime returns the current run's list. | `id`: scheduled command ID. | `Promise<RuntimeCronItem[]>` |
-| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | Add a runtime scheduled command. | `cron`: required cron expression; `cmd`: required trigger command; remaining fields keep compatibility with old signatures. | Current JS helper sends the request but returns no result. |
-| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | Update a runtime scheduled command. | `id`, `cron`, and `cmd` are required; remaining fields keep compatibility with old signatures. | Current JS helper sends the request but returns no result. |
-| `delCron(id)` | Delete a runtime scheduled command. | `id`: required. | Current JS helper sends the request but returns no result. |
+| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | Add a runtime scheduled command. | `cron`: required cron expression; `cmd`: required trigger command; remaining fields keep compatibility with old signatures. | `Promise<RuntimeCronItem \| any>` |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | Update a runtime scheduled command. | `id`, `cron`, and `cmd` are required; remaining fields keep compatibility with old signatures. | `Promise<RuntimeCronItem \| any>` |
+| `delCron(id)` | Delete a runtime scheduled command. | `id`: required. | `Promise<boolean \| any>` |
 
 `RuntimeCronItem` example:
 
@@ -155,21 +150,21 @@ console.log(items)
 
 ## Group management
 
-These methods depend on current IM adapter support. Unsupported adapters may return errors or have no effect. The current JS helper sends requests but does not return a Promise. If you need to confirm the result, use an adapter-supported explicit API or wait for future SDK improvements.
+These methods depend on current IM adapter support. Unsupported adapters may return errors or have no effect. The JS helper returns the runtime result, so you can `await` it and inspect the adapter response.
 
 | Method | Purpose | Parameters | Returns |
 |---|---|---|---|
-| `groupInviteIn(friend, group)` | Invite a friend into a group. | `friend`: required friend ID; `group`: required group ID. | `void` |
-| `groupKick(userid)` | Kick a group member. | `userid`: required user ID. | `void` |
-| `groupBan(userid, timeout)` | Mute a group member. | `userid`: required user ID; `timeout`: required mute seconds or adapter-required unit. | `void` |
-| `groupUnban(userid)` | Unmute a member. | `userid`: required user ID. | `void` |
-| `groupWholeBan()` | Enable whole-group mute. | None | `void` |
-| `groupWholeUnban()` | Disable whole-group mute. | None | `void` |
-| `groupNoticeSend(notice)` | Send a group announcement. | `notice`: required announcement content. | `void` |
+| `groupInviteIn(friend, group)` | Invite a friend into a group. | `friend`: required friend ID; `group`: required group ID. | `Promise<any>` |
+| `groupKick(userid)` | Kick a group member. | `userid`: required user ID. | `Promise<any>` |
+| `groupBan(userid, timeout)` | Mute a group member. | `userid`: required user ID; `timeout`: required mute seconds or adapter-required unit. | `Promise<any>` |
+| `groupUnban(userid)` | Unmute a member. | `userid`: required user ID. | `Promise<any>` |
+| `groupWholeBan()` | Enable whole-group mute. | None | `Promise<any>` |
+| `groupWholeUnban()` | Disable whole-group mute. | None | `Promise<any>` |
+| `groupNoticeSend(notice)` | Send a group announcement. | `notice`: required announcement content. | `Promise<any>` |
 
 ```js
-sender.groupBan('10001', 600)
-sender.groupNoticeSend('Maintenance tonight at 22:00. Save your work in advance.')
+await sender.groupBan('10001', 600)
+await sender.groupNoticeSend('Maintenance tonight at 22:00. Save your work in advance.')
 ```
 
 ## Next steps

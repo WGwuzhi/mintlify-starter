@@ -229,13 +229,13 @@ declare namespace AutClawMiddleware {
     waitPay(exitcode: string, timeout: number, amount?: string | number): Promise<WaitPayResult>
     atWaitPay(): Promise<boolean>
 
-    groupInviteIn(friend: string, group: string): void
-    groupKick(userid: string): void
-    groupBan(userid: string, timeout: number): void
-    groupUnban(userid: string): void
-    groupWholeBan(): void
-    groupWholeUnban(): void
-    groupNoticeSend(notice: string): void
+    groupInviteIn(friend: string, group: string): Promise<unknown>
+    groupKick(userid: string): Promise<unknown>
+    groupBan(userid: string, timeout: number): Promise<unknown>
+    groupUnban(userid: string): Promise<unknown>
+    groupWholeBan(): Promise<unknown>
+    groupWholeUnban(): Promise<unknown>
+    groupNoticeSend(notice: string): Promise<unknown>
 
     getPluginName(): Promise<string>
     getPluginVersion(): Promise<string>
@@ -259,7 +259,7 @@ declare namespace AutClawMiddleware {
       disguiseImtype?: string,
       disguiseGroup?: string,
       disguiseUser?: string,
-    ): void
+    ): Promise<unknown>
     updateCron(
       id: string | number,
       cron: string,
@@ -271,8 +271,8 @@ declare namespace AutClawMiddleware {
       disguiseImtype?: string,
       disguiseGroup?: string,
       disguiseUser?: string,
-    ): void
-    delCron(id: string | number): void
+    ): Promise<unknown>
+    delCron(id: string | number): Promise<unknown>
   }
 }
 
@@ -285,11 +285,11 @@ declare const middleware: {
   getActiveImtypes(): Promise<string[]>
 
   push(imType: string, groupCode: string, userID: string, title: string, content: string, options?: Record<string, unknown>, timeout?: number): Promise<number>
-  pushImage(imType: string, groupCode: string, userID: string, title: string, imageUrl: string): Promise<unknown>
-  pushVideo(imType: string, groupCode: string, userID: string, title: string, videoUrl: string): Promise<unknown>
-  pushVoice(imType: string, groupCode: string, userID: string, title: string, voiceUrl: string): Promise<unknown>
-  pushFile(imType: string, groupCode: string, userID: string, title: string, fileUrl: string, options?: AutClawMiddleware.MediaOptions): Promise<unknown>
-  pushMixed(imType: string, groupCode: string, userID: string, title: string, items: AutClawMiddleware.MediaItem[]): Promise<unknown>
+  pushImage(imType: string, groupCode: string, userID: string, title: string, imageUrl: string, options?: AutClawMiddleware.MediaOptions, timeout?: number): Promise<number>
+  pushVideo(imType: string, groupCode: string, userID: string, title: string, videoUrl: string, options?: AutClawMiddleware.MediaOptions, timeout?: number): Promise<number>
+  pushVoice(imType: string, groupCode: string, userID: string, title: string, voiceUrl: string, options?: AutClawMiddleware.MediaOptions, timeout?: number): Promise<number>
+  pushFile(imType: string, groupCode: string, userID: string, title: string, fileUrl: string, options?: AutClawMiddleware.MediaOptions, timeout?: number): Promise<number>
+  pushMixed(imType: string, groupCode: string, userID: string, title: string, items: AutClawMiddleware.MediaItem[], options?: AutClawMiddleware.MediaOptions, timeout?: number): Promise<number>
 
   fileDownload(url: string, path?: string): Promise<AutClawMiddleware.FileDownloadResult>
   downloadAdapterFile(file: AutClawMiddleware.MediaItem | Record<string, unknown> | string, options?: Record<string, unknown> | number, timeout?: number): Promise<AutClawMiddleware.FileDownloadResult>
@@ -302,8 +302,6 @@ declare const middleware: {
   version(): Promise<string>
   versionInfo(): Promise<AutClawMiddleware.VersionInfo>
   importModule(module: string, versionOrOptions?: string | AutClawMiddleware.ImportModuleOptions, manager?: string): Promise<unknown>
-  accessService(path: string, body?: Record<string, unknown> | null, timeout?: number): Promise<unknown>
-
   get(key: string): Promise<unknown>
   set(key: string, value: unknown): Promise<unknown>
   del(key: string): Promise<unknown>
@@ -314,7 +312,7 @@ declare const middleware: {
   bucketAllKeys(bucket: string): Promise<string[]>
   bucketAll(bucket: string): Promise<Record<string, unknown>>
 
-  notifyMasters(content: string, imtypes?: string[]): Promise<unknown>
+  notifyMasters(content: string, imtypes?: string[]): Promise<number>
   coffee(): Promise<boolean>
   spread(msg: string): Promise<unknown>
   getHistoryMessages(imtype?: string): Promise<unknown[]>

@@ -1,0 +1,117 @@
+---
+title: "工具、Cron 和群管理"
+description: "在 Python 插件中使用 import_module、系统工具函数、Cron 定时任务和群管理方法。"
+keywords: ["import_module", "Cron", "群管理", "notifyMasters"]
+icon: "wrench"
+---
+
+本页覆盖 `middleware.py` 的依赖导入、系统工具函数、运行时定时指令和群管理方法。公开插件应优先使用明确列出的函数，不要依赖未公开内部动作。
+
+## `import_module(module, package="", version="", manager="")`
+
+确保 Python 依赖可用，然后返回导入后的模块对象。
+
+<ParamField path="module" type="str" required>
+  `importlib.import_module(...)` 使用的模块名。
+</ParamField>
+
+<ParamField path="package" type="str">
+  真实包名。包名与导入名不一致时使用，例如导入子模块 `PIL.Image` 时安装包是 `pillow`。
+</ParamField>
+
+<ParamField path="version" type="str">
+  需要安装的版本。
+</ParamField>
+
+<ParamField path="manager" type="str">
+  包管理器名称。Python 依赖通常使用 `pip`；不传时由运行时处理。
+</ParamField>
+
+```python
+from middleware import import_module
+
+requests = import_module("requests", version="2.32.3", manager="pip")
+image_module = import_module("PIL.Image", package="pillow", version="10.4.0", manager="pip")
+```
+
+当前 SDK 也保留 `importModule = import_module` 兼容别名。新 Python 插件建议使用 `import_module(...)`。
+
+<Tip>
+  固定依赖优先写到 manifest 的 `dependency` 中；`import_module(...)` 适合按需加载、动态版本或兼容旧插件。不要在高频循环里反复调用它。
+</Tip>
+
+## 系统和实用函数
+
+| 函数 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `render(template, selector, jsondata)` | 渲染 HTML/template，常用于生成图片。 | 模板、选择器、数据。 | 渲染结果 |
+| `getActiveImtypes()` | 获取当前启用的 IM 类型。 | 无 | `list[str]` |
+| `name()` | 获取机器人名称。 | 无 | `str` |
+| `domain()` | 获取域名或公网地址。 | 无 | `str` |
+| `port()` / `getPort()` | 获取服务端口。 | 无 | `str \| int` |
+| `machineId()` | 获取机器 ID。 | 无 | `str` |
+| `version()` | 获取 autClaw 版本。 | 无 | `str` |
+| `versionInfo()` | 获取结构化版本信息。 | 无 | `dict` |
+| `notifyMasters(content, imtypes=[])` | 通知管理员。 | 内容和可选 IM 类型列表。 | `int`，发送数量。 |
+| `coffee()` | 获取咖啡码激活状态。 | 无 | `bool` |
+| `spread(msg)` | 兼容旧插件的推广转链入口。 | `msg`：必填。 | 运行时结果 |
+| `getHistoryMessages(imtype="")` | 获取最近历史消息。 | `imtype`：可选 IM 类型。 | 历史消息列表 |
+| `generateFromSinglePrompt(prompt)` | 兼容旧插件的单 prompt 生成入口。 | `prompt`：必填。 | `str` |
+| `printf(message)` | 打印并刷新输出。 | `message`：必填。 | `None` |
+
+<Warning>
+  SDK 为兼容保留了 `imtypes=[]` 这类默认参数。你自己的 Python 函数建议使用 `None` 作为默认值，避免可变默认参数问题。
+</Warning>
+
+## `Cron`
+
+`Cron` 用来管理运行中的定时指令。它不同于 manifest 里的 `cron`：manifest `cron` 用来让当前插件自触发；`Cron` 类用来增删改查运行时定时指令。
+
+```python
+from middleware import Cron
+
+cron = Cron()
+items = cron.getCrons()
+added = cron.addCron("0 9 * * *", False, "daily reminder", True, None, "每日提醒")
+
+print(items, added)
+```
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `Cron(cronID=None)` | 创建 Cron helper；`cronID` 是兼容旧签名的可选参数。 | 可选。 | `Cron` 实例 |
+| `getCrons()` | 获取当前运行创建的定时指令列表。 | 无 | 定时指令列表 |
+| `getCronByID(id)` | 获取某个定时指令。 | `id`：必填。 | 定时指令或运行时结果 |
+| `getCron(id)` | `getCronByID(...)` 兼容别名。 | `id`：必填。 | 定时指令或运行时结果 |
+| `addCron(cron, isOnce=False, cmd=None, isToSelf=None, toOthers=None, memo=None, disguiseImtype=None, disguiseGroup=None, disguiseUser=None)` | 添加运行时定时指令。 | `cron` 必填；其余参数可选，`None` 会被省略。 | 新定时 ID 或运行时结果 |
+| `updateCron(id, cron=None, isOnce=None, cmd=None, isToSelf=None, toOthers=None, memo=None, disguiseImtype=None, disguiseGroup=None, disguiseUser=None)` | 更新运行时定时指令。 | `id` 必填；只传需要更新的字段。 | 运行时结果 |
+| `deleteCron(id)` | 删除运行时定时指令。 | `id`：必填。 | 运行时结果 |
+| `delCron(id)` | `deleteCron(...)` 兼容别名。 | `id`：必填。 | 运行时结果 |
+
+<Info>
+  当前 Python `addCron(...)` / `updateCron(...)` 不需要传完整位置参数；方法会省略值为 `None` 的字段。需要清空字段时，传空字符串 `""`。
+</Info>
+
+## 群管理
+
+这些方法依赖当前 IM 适配器支持情况。不支持时可能返回错误或无效果。调用结果会直接返回运行时 `data`。
+
+| 方法 | 作用 | 参数 | 返回 |
+|---|---|---|---|
+| `groupInviteIn(friend, group)` | 邀请好友入群。 | `friend`：好友 ID；`group`：群 ID。 | 运行时结果 |
+| `groupKick(userid)` | 踢出群成员。 | `userid`：用户 ID。 | 运行时结果 |
+| `groupBan(userid, timeout)` | 禁言群成员。 | `timeout`：禁言秒数或适配器要求的单位。 | 运行时结果 |
+| `groupUnban(userid)` | 解除禁言。 | `userid`：用户 ID。 | 运行时结果 |
+| `groupWholeBan()` | 开启全员禁言。 | 无 | 运行时结果 |
+| `groupWholeUnban()` | 关闭全员禁言。 | 无 | 运行时结果 |
+| `groupNoticeSend(notice)` | 发送群公告。 | `notice`：公告内容。 | 运行时结果 |
+
+```python
+sender.groupBan("10001", 600)
+sender.groupNoticeSend("今晚 22:00 维护，请提前保存数据。")
+```
+
+## 下一步
+
+- 定时任务里主动发消息：[`主动推送`](/cn/plugin-sdk/python/push)
+- 查看完整签名：[`Python 签名速查`](/cn/plugin-sdk/python/signatures)

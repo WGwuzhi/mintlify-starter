@@ -172,33 +172,35 @@ sender.replyMixed([
 ```js JavaScript
 const { pushImage, pushVideo, pushMixed } = require('./middleware.js')
 
-await pushImage('qq', '123456', '', '日报', './daily.png')
-await pushVideo('qq', '123456', '', '演示视频', './demo.mp4')
+await pushImage('qq', '123456', '', '日报', './daily.png', { account_id: 'bot_qq_ops' })
+await pushVideo('qq', '123456', '', '演示视频', './demo.mp4', { account_id: 'bot_qq_ops' })
 await pushMixed('qq', '123456', '', '处理结果', [
   { type: 'text', text: '结果如下：' },
   { type: 'image', source: './result.png' },
-])
+], { account_id: 'bot_qq_ops' })
 ```
 
 ```python Python
 from middleware import pushImage, pushVideo, pushMixed
 
-pushImage("qq", "123456", "", "日报", "./daily.png")
-pushVideo("qq", "123456", "", "演示视频", "./demo.mp4")
+pushImage("qq", "123456", "", "日报", "./daily.png", {"account_id": "bot_qq_ops"})
+pushVideo("qq", "123456", "", "演示视频", "./demo.mp4", {"account_id": "bot_qq_ops"})
 pushMixed("qq", "123456", "", "处理结果", [
     {"type": "text", "text": "结果如下："},
     {"type": "image", "source": "./result.png"},
-])
+], {"account_id": "bot_qq_ops"})
 ```
 </CodeGroup>
 
 | 方法 | 参数 | 返回 |
 |---|---|---|
-| `pushImage` | `(imType, groupCode, userID, title, imageUrl)` | 运行时 `data` |
-| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl)` | 运行时 `data` |
-| `pushVideo` | `(imType, groupCode, userID, title, videoUrl)` | 运行时 `data` |
-| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?)` | 运行时 `data` |
-| `pushMixed` | `(imType, groupCode, userID, title, items)` | 运行时 `data` |
+| `pushImage` | `(imType, groupCode, userID, title, imageUrl, options?, timeout?)` | 发送数量，通常是 `0` 或 `1` |
+| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl, options?, timeout?)` | 发送数量 |
+| `pushVideo` | `(imType, groupCode, userID, title, videoUrl, options?, timeout?)` | 发送数量 |
+| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?, timeout?)` | 发送数量 |
+| `pushMixed` | `(imType, groupCode, userID, title, items, options?, timeout?)` | 发送数量 |
+
+更多主动推送账号选择规则见 [`JavaScript 主动推送`](/cn/plugin-sdk/javascript/push) 或 [`Python 主动推送`](/cn/plugin-sdk/python/push)。
 
 ## 保存并发送文件
 

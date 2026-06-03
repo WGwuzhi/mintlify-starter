@@ -127,11 +127,6 @@ const marketHook = importJs('specter:hook.js')
 | `spread(msg)` | 兼容旧插件的推广转链入口；未配置相关能力时返回空字符串。 | `msg`：必填。 | `Promise<string>` |
 | `getHistoryMessages(imtype?)` | 获取最近历史消息。 | `imtype`：可选 IM 类型。 | `Promise<any[]>` |
 | `generateFromSinglePrompt(prompt)` | 兼容旧插件的单 prompt 生成入口；当前运行时可能返回空字符串。 | `prompt`：必填。 | `Promise<string>` |
-| `accessService(path, body?, timeout?)` | 调用运行时兼容接口。 | `path`：必填内部动作路径；`body`：可选；`timeout`：可选毫秒。 | `Promise<any>` |
-
-<Warning>
-  `accessService(...)` 是底层兼容入口。公开插件应优先使用本页明确列出的方法，避免依赖未公开的内部动作。
-</Warning>
 
 ## `Cron`
 
@@ -145,18 +140,18 @@ const { Cron } = require('./middleware.js')
 
 const cron = new Cron()
 const items = await cron.getCrons()
-cron.addCron('0 9 * * *', false, 'daily reminder', true, null, '每日提醒')
+const added = await cron.addCron('0 9 * * *', false, 'daily reminder', true, null, '每日提醒')
 
-console.log(items)
+console.log(items, added)
 ```
 
 | 方法 | 作用 | 参数 | 返回 |
 |---|---|---|---|
 | `getCrons()` | 获取当前运行创建的定时指令列表。 | 无 | `Promise<RuntimeCronItem[]>` |
 | `getCron(id)` | 当前 helper 会请求运行时 cron 列表并带上 `id`；实际运行时返回当前 run 的列表。 | `id`：定时指令 ID。 | `Promise<RuntimeCronItem[]>` |
-| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | 添加运行时定时指令。 | `cron`：必填 cron 表达式；`cmd`：必填触发命令；其余字段为兼容旧签名。 | 当前 JS helper 发起请求但不返回结果。 |
-| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 更新运行时定时指令。 | `id`、`cron`、`cmd` 必填；其余兼容旧签名。 | 当前 JS helper 发起请求但不返回结果。 |
-| `delCron(id)` | 删除运行时定时指令。 | `id`：必填。 | 当前 JS helper 发起请求但不返回结果。 |
+| `addCron(cron, isOnce?, cmd?, isToSelf?, toOthers?, memo?, disguiseImtype?, disguiseGroup?, disguiseUser?)` | 添加运行时定时指令。 | `cron`：必填 cron 表达式；`cmd`：必填触发命令；其余字段为兼容旧签名。 | `Promise<RuntimeCronItem \| any>` |
+| `updateCron(id, cron, isOnce, cmd, isToSelf, toOthers, memo, disguiseImtype, disguiseGroup, disguiseUser)` | 更新运行时定时指令。 | `id`、`cron`、`cmd` 必填；其余兼容旧签名。 | `Promise<RuntimeCronItem \| any>` |
+| `delCron(id)` | 删除运行时定时指令。 | `id`：必填。 | `Promise<boolean \| any>` |
 
 `RuntimeCronItem` 示例：
 
@@ -177,21 +172,21 @@ console.log(items)
 
 ## 群管理
 
-这些方法依赖当前 IM 适配器支持情况。不支持时可能返回错误或无效果。当前 JS helper 发起请求但不返回 Promise；如果你需要确认结果，应使用适配器明确支持的接口或等待后续 SDK 改进。
+这些方法依赖当前 IM 适配器支持情况。不支持时可能返回错误或无效果。JS helper 会返回运行时结果，你可以 `await` 后判断适配器返回。
 
 | 方法 | 作用 | 参数 | 返回 |
 |---|---|---|---|
-| `groupInviteIn(friend, group)` | 邀请好友入群。 | `friend`：必填，好友 ID；`group`：必填，群 ID。 | `void` |
-| `groupKick(userid)` | 踢出群成员。 | `userid`：必填，用户 ID。 | `void` |
-| `groupBan(userid, timeout)` | 禁言群成员。 | `userid`：必填，用户 ID；`timeout`：必填，禁言秒数或适配器要求的单位。 | `void` |
-| `groupUnban(userid)` | 解除禁言。 | `userid`：必填，用户 ID。 | `void` |
-| `groupWholeBan()` | 开启全员禁言。 | 无 | `void` |
-| `groupWholeUnban()` | 关闭全员禁言。 | 无 | `void` |
-| `groupNoticeSend(notice)` | 发送群公告。 | `notice`：必填，公告内容。 | `void` |
+| `groupInviteIn(friend, group)` | 邀请好友入群。 | `friend`：必填，好友 ID；`group`：必填，群 ID。 | `Promise<any>` |
+| `groupKick(userid)` | 踢出群成员。 | `userid`：必填，用户 ID。 | `Promise<any>` |
+| `groupBan(userid, timeout)` | 禁言群成员。 | `userid`：必填，用户 ID；`timeout`：必填，禁言秒数或适配器要求的单位。 | `Promise<any>` |
+| `groupUnban(userid)` | 解除禁言。 | `userid`：必填，用户 ID。 | `Promise<any>` |
+| `groupWholeBan()` | 开启全员禁言。 | 无 | `Promise<any>` |
+| `groupWholeUnban()` | 关闭全员禁言。 | 无 | `Promise<any>` |
+| `groupNoticeSend(notice)` | 发送群公告。 | `notice`：必填，公告内容。 | `Promise<any>` |
 
 ```js
-sender.groupBan('10001', 600)
-sender.groupNoticeSend('今晚 22:00 维护，请提前保存数据。')
+await sender.groupBan('10001', 600)
+await sender.groupNoticeSend('今晚 22:00 维护，请提前保存数据。')
 ```
 
 ## 下一步

@@ -1,0 +1,89 @@
+---
+title: "Events, media, and files"
+description: "Read event data, get media items, download user-uploaded files, and get group member lists in Python plugins."
+keywords: ["getMediaItems", "downloadAdapterFile", "fileDownload", "group member list"]
+icon: "file-down"
+---
+
+This page covers event fields, `sender.getMediaItems()`, file downloads, and group member lists. When handling user-uploaded files, use standardized `MediaItem` values instead of building platform-specific download URLs.
+
+## Event methods
+
+| Method | Purpose | Parameters | Returns |
+|---|---|---|---|
+| `getPluginName()` | Get the current plugin title; falls back to plugin name. | None | `str` |
+| `getPluginVersion()` | Get the current plugin version. | None | `str` |
+| `getEventType()` | Get the current event type. | None | `str` |
+| `setEventType(eventType)` | Set the current runtime event type. | `eventType`: required. | `bool` |
+| `getEventData()` | Get current event data. Returns `{}` when missing. | None | JSON-like |
+| `setEventData(eventData)` | Set current event data. | `eventData`: any JSON-like value. | `bool` |
+| `getMediaItems()` | Get media from the current event or latest waited input. | None | `list[dict]` |
+
+```python
+event_type = sender.getEventType()
+event_data = sender.getEventData()
+sender.setEventData({"handled": True, "source": event_type, "raw": event_data})
+```
+
+## `getMediaItems()`
+
+`getMediaItems()` first returns media captured by the latest `listen(...)` / `input(...)`. If no waited-input media exists, it returns `media_items` / `mediaItems` from the current event data.
+
+```python
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+image_item = next((item for item in items if item.get("type") == "image"), None)
+```
+
+## `fileDownload(url, path=None)`
+
+Download a remote URL, `base64://...`, or data URI to the local file directory.
+
+```python
+from middleware import fileDownload
+
+saved = fileDownload("https://example.com/a.png", "images")
+sender.replyImage(saved["path"])
+```
+
+## `downloadAdapterFile(file, options=None, timeout=None)`
+
+Download a file item received by an adapter. You can pass a `MediaItem` returned by `sender.getMediaItems()` directly.
+
+```python
+from middleware import downloadAdapterFile
+
+items = sender.getMediaItems()
+file_item = next((item for item in items if item.get("type") == "file"), None)
+
+if file_item:
+    saved = downloadAdapterFile(file_item, {"path": "imports"}, 30000)
+    sender.reply(f"Saved: {saved.get('file_name')}")
+else:
+    sender.reply("No file received.")
+```
+
+`download_adapter_file(...)` is the Python alias of `downloadAdapterFile(...)`.
+
+## `getGroupMemberList(group_id_or_options=None, options=None, timeout=None)`
+
+Get the group member list. Pass a group ID or an options dictionary.
+
+```python
+from middleware import getGroupMemberList
+
+members = getGroupMemberList("123456", {
+    "imType": "qq",
+    "account_id": "bot_qq_ops",
+})
+
+for member in members.get("members", []):
+    print(member.get("user_id"), member.get("display_name") or member.get("nickname"))
+```
+
+`get_group_member_list(...)` is the Python alias of `getGroupMemberList(...)`.
+
+## Next steps
+
+- Media sources and mixed syntax: [`Media sending`](/en/plugin-sdk/media)
+- Store download results: [`Storage and routes`](/en/plugin-sdk/python/storage-and-routes)

@@ -172,33 +172,35 @@ Proactive push does not depend on the current message. Specify the target:
 ```js JavaScript
 const { pushImage, pushVideo, pushMixed } = require('./middleware.js')
 
-await pushImage('qq', '123456', '', 'Daily report', './daily.png')
-await pushVideo('qq', '123456', '', 'Demo video', './demo.mp4')
+await pushImage('qq', '123456', '', 'Daily report', './daily.png', { account_id: 'bot_qq_ops' })
+await pushVideo('qq', '123456', '', 'Demo video', './demo.mp4', { account_id: 'bot_qq_ops' })
 await pushMixed('qq', '123456', '', 'Result', [
   { type: 'text', text: 'Result:' },
   { type: 'image', source: './result.png' },
-])
+], { account_id: 'bot_qq_ops' })
 ```
 
 ```python Python
 from middleware import pushImage, pushVideo, pushMixed
 
-pushImage("qq", "123456", "", "Daily report", "./daily.png")
-pushVideo("qq", "123456", "", "Demo video", "./demo.mp4")
+pushImage("qq", "123456", "", "Daily report", "./daily.png", {"account_id": "bot_qq_ops"})
+pushVideo("qq", "123456", "", "Demo video", "./demo.mp4", {"account_id": "bot_qq_ops"})
 pushMixed("qq", "123456", "", "Result", [
     {"type": "text", "text": "Result:"},
     {"type": "image", "source": "./result.png"},
-])
+], {"account_id": "bot_qq_ops"})
 ```
 </CodeGroup>
 
 | Method | Parameters | Returns |
 |---|---|---|
-| `pushImage` | `(imType, groupCode, userID, title, imageUrl)` | Runtime `data` |
-| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl)` | Runtime `data` |
-| `pushVideo` | `(imType, groupCode, userID, title, videoUrl)` | Runtime `data` |
-| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?)` | Runtime `data` |
-| `pushMixed` | `(imType, groupCode, userID, title, items)` | Runtime `data` |
+| `pushImage` | `(imType, groupCode, userID, title, imageUrl, options?, timeout?)` | Send count, usually `0` or `1` |
+| `pushVoice` | `(imType, groupCode, userID, title, voiceUrl, options?, timeout?)` | Send count |
+| `pushVideo` | `(imType, groupCode, userID, title, videoUrl, options?, timeout?)` | Send count |
+| `pushFile` | `(imType, groupCode, userID, title, fileUrl, options?, timeout?)` | Send count |
+| `pushMixed` | `(imType, groupCode, userID, title, items, options?, timeout?)` | Send count |
+
+For proactive push account selection rules, see [`JavaScript proactive push`](/en/plugin-sdk/javascript/push) or [`Python proactive push`](/en/plugin-sdk/python/push).
 
 ## Save and send files
 
