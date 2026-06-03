@@ -1,11 +1,17 @@
 ---
-title: "autClaw docs"
-description: "Deploy autClaw on Linux with Docker, manage runtime paths and upgrades, and build JavaScript or Python plugins."
-keywords: ["autClaw docs", "autClaw deployment", "Docker deployment", "plugin SDK"]
+title: "autClaw deployment and plugin docs"
+description: "Deploy autClaw with Docker on Linux, FNOS, or Synology, manage runtime directories and upgrades, and build JavaScript or Python plugins."
+keywords: ["autClaw docs", "autClaw deployment", "Docker deployment", "bot plugins", "plugin SDK"]
 icon: "bot"
 ---
 
 autClaw is built for Linux and Docker production environments. The Docker image provides a stable runtime base. By default, the app, frontend assets, plugin directory, and runtime dependencies are persisted under `/opt/autclaw`.
+
+## What is autClaw?
+
+autClaw is a self-hosted automation bot and plugin runtime. You can connect IM accounts, install or write plugins, and handle messages, notifications, payment events, HTTP routes, and scheduled tasks from the web console.
+
+If Docker is ready, follow [How to deploy autClaw with Docker](/en/getting-started/deploy) to start the service.
 
 <CardGroup cols={2}>
   <Card title="Deploy autClaw" icon="rocket" href="/en/getting-started/deploy">
@@ -42,3 +48,9 @@ docker logs -f autclaw
 <Note>
   autClaw currently targets Linux package execution and Docker + Linux package execution. Windows is not supported.
 </Note>
+
+## Next steps
+
+- Start the service with [How to deploy autClaw with Docker](/en/getting-started/deploy).
+- Review [runtime directories and paths](/en/getting-started/runtime-paths) before moving data or recreating containers.
+- Use the [plugin SDK overview](/en/plugin-sdk/overview) to build JavaScript or Python plugins.

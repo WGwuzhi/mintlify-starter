@@ -1,9 +1,11 @@
 ---
-title: "升级 autClaw"
-description: "通过系统右上角或 IM 渠道命令升级 autClaw，了解哪些运行目录和 middleware 文件会被保留或覆盖。"
-keywords: ["autClaw 升级", "在线更新", "IM 更新命令", "middleware"]
+title: "如何升级 autClaw"
+description: "从 Web 控制台或 IM 管理员命令升级 autClaw，确认 Docker 容器、运行目录和 middleware 文件的保留规则。"
+keywords: ["autClaw 升级", "在线更新", "IM 更新命令", "middleware", "Docker 升级"]
 icon: "refresh-cw"
 ---
+
+本页说明 autClaw 应用版本如何升级，以及哪些文件会在在线升级、首启拉包或 release bundle 中被覆盖。日常升级优先使用 Web 控制台或管理员 IM 命令。
 
 ## 推荐方式：系统右上角更新
 
@@ -61,3 +63,9 @@ plugin/scripts/middleware/middleware.go
 <Note>
   默认在线更新源和首启 release bundle 拉取目标均指向 `WGwuzhi/autClaw`。
 </Note>
+
+## 升级前检查
+
+- 不要删除 [持久化路径](/cn/getting-started/runtime-paths) 中的数据库、插件目录和运行时依赖目录。
+- 如果你只想更新 Docker 基座，使用 [autClaw Docker 运维命令](/cn/operations/docker) 拉取新镜像并重新创建容器。
+- 升级后如需排查问题，先用 `docker logs -f autclaw` 查看启动日志。

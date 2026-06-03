@@ -1,11 +1,13 @@
 ---
-title: "Chromium 中文环境"
-description: "在直接运行 autClaw release 产物时安装中文字体和 locale，修复 Chromium 截图与浏览器脚本的中文显示。"
-keywords: ["Chromium 中文字体", "CJK locale", "autClaw 截图", "浏览器脚本"]
+title: "为 autClaw 配置 Chromium 中文环境"
+description: "在 Debian 或 Ubuntu 直接运行 autClaw release 产物时安装 Chromium、中文字体和 locale，修复截图与浏览器脚本中文显示。"
+keywords: ["Chromium 中文字体", "CJK locale", "autClaw 截图", "浏览器脚本", "Debian Chromium"]
 icon: "languages"
 ---
 
 如果你不用 Docker，而是直接运行 release / 编译产物，浏览器、网页截图和 `chromedp` 相关脚本能否正常显示中文，取决于宿主机是否安装 Chromium 中文语言包、CJK 字体和 `zh_CN.UTF-8` locale。
+
+Docker 镜像已经内置常用运行环境。只有在宿主机直接运行 autClaw，且截图、浏览器脚本或页面渲染出现中文方块、乱码或缺字时，才需要按本页安装。
 
 ## Debian / Ubuntu 一键安装
 
@@ -14,3 +16,13 @@ sudo bash -lc 'set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; apt-get
 ```
 
 安装后，重新启动手工启动的 Chromium / Chrome 调试进程。如果 autClaw 已运行，也建议重启一次 autClaw。
+
+## 验证环境
+
+```bash
+locale | grep 'zh_CN.UTF-8'
+fc-match 'Noto Sans CJK SC'
+chromium --version
+```
+
+如果命令没有输出中文 locale 或 CJK 字体，重新执行安装命令并确认 `locale-gen zh_CN.UTF-8` 已成功完成。

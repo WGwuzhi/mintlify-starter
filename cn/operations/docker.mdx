@@ -1,9 +1,11 @@
 ---
-title: "Docker 运维命令"
-description: "使用 Docker 和 Docker Compose 查看日志、重启、删除、更新 autClaw 容器，并配置飞牛 OS 或群晖部署。"
-keywords: ["autClaw Docker", "Docker Compose", "查看日志", "更新容器"]
+title: "autClaw Docker 运维命令"
+description: "使用 Docker 和 Docker Compose 查看 autClaw 日志、重启、删除、更新容器，并配置飞牛 OS 或群晖 DSM 持久化目录。"
+keywords: ["autClaw Docker", "Docker Compose", "查看日志", "更新容器", "飞牛 OS Docker"]
 icon: "container"
 ---
+
+本页用于已部署后的日常容器维护。你可以查看日志、重建容器、拉取最新镜像，或用 Docker Compose 统一管理飞牛 OS 和群晖 DSM 的持久化目录。
 
 ## 查看日志
 
@@ -56,3 +58,9 @@ AUTCLAW_HOST_DATA_DIR=/vol1/1000/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker co
 ```bash
 AUTCLAW_HOST_DATA_DIR=/volume1/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
 ```
+
+## 相关文档
+
+- 第一次安装见 [如何用 Docker 部署 autClaw](/cn/getting-started/deploy)。
+- 持久化路径含义见 [autClaw 运行目录和持久化路径](/cn/getting-started/runtime-paths)。
+- 应用内在线升级见 [如何升级 autClaw](/cn/getting-started/upgrade)。

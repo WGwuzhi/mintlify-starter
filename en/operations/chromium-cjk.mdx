@@ -1,11 +1,13 @@
 ---
-title: "Chromium CJK environment"
-description: "Install Chinese fonts and locale for Chromium screenshots and browser scripts when running autClaw release artifacts directly."
-keywords: ["Chromium Chinese fonts", "CJK locale", "autClaw screenshots", "browser scripts"]
+title: "Configure Chromium CJK support for autClaw"
+description: "Install Chromium, Chinese fonts, and locale on Debian or Ubuntu when running autClaw release artifacts directly for screenshots and browser scripts."
+keywords: ["Chromium Chinese fonts", "CJK locale", "autClaw screenshots", "browser scripts", "Debian Chromium"]
 icon: "languages"
 ---
 
 If you do not use Docker and run a release or build artifact directly, browser scripts, screenshots, and `chromedp` tasks depend on the host for Chromium language packs, CJK fonts, and the `zh_CN.UTF-8` locale.
+
+The Docker image already includes the common runtime environment. Use this page only when you run autClaw directly on the host and screenshots, browser scripts, or rendered pages show missing Chinese glyphs or mojibake.
 
 ## Install on Debian / Ubuntu
 
@@ -14,3 +16,13 @@ sudo bash -lc 'set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; apt-get
 ```
 
 After installation, restart any manually started Chromium / Chrome debugging process. If autClaw is already running, restart autClaw as well.
+
+## Verify the environment
+
+```bash
+locale | grep 'zh_CN.UTF-8'
+fc-match 'Noto Sans CJK SC'
+chromium --version
+```
+
+If the commands do not show the Chinese locale or a CJK font, rerun the install command and confirm that `locale-gen zh_CN.UTF-8` completed successfully.

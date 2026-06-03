@@ -5,7 +5,7 @@
 - This is the public autClaw documentation site built on Mintlify.
 - Pages are MDX files with YAML frontmatter.
 - Configuration lives in `docs.json`.
-- Public deployment target: `https://ac-d39c0861.mintlify.app/`.
+- Public deployment target: `https://autclaw.shop/`.
 
 ## Style preferences
 

@@ -1,9 +1,11 @@
 ---
-title: "运行目录和持久化路径"
-description: "查看 autClaw 在 Docker 和直接运行模式下使用的持久化目录、插件目录、文件目录和默认端口。"
-keywords: ["autClaw 运行目录", "持久化路径", "插件目录", "默认端口"]
+title: "autClaw 运行目录和持久化路径"
+description: "查看 autClaw Docker 和直接运行模式的数据库、插件目录、前端资源、依赖目录、HTTP_ADDR 和默认 8200 端口。"
+keywords: ["autClaw 运行目录", "持久化路径", "插件目录", "HTTP_ADDR", "默认端口"]
 icon: "folder-tree"
 ---
+
+用本页确认 autClaw 哪些目录必须持久化。重建 Docker 容器、迁移 NAS 目录或备份实例前，先记录数据库、插件、前端资源和运行时依赖的路径。
 
 ## Docker 默认路径
 
@@ -42,3 +44,9 @@ Docker 镜像内会显式设置：
 ```text
 HTTP_ADDR=:8200
 ```
+
+## 相关文档
+
+- 新实例部署见 [如何用 Docker 部署 autClaw](/cn/getting-started/deploy)。
+- 容器重建、日志和更新命令见 [autClaw Docker 运维命令](/cn/operations/docker)。
+- 升级前想确认哪些目录不会被覆盖，查看 [如何升级 autClaw](/cn/getting-started/upgrade)。

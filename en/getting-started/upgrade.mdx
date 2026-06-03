@@ -1,9 +1,11 @@
 ---
-title: "Upgrade autClaw"
-description: "Upgrade autClaw from the web app or an IM command, and learn which runtime directories and middleware files are preserved or overwritten."
-keywords: ["autClaw upgrade", "online update", "IM update command", "middleware"]
+title: "How to upgrade autClaw"
+description: "Upgrade autClaw from the web app or an IM administrator command, and confirm which runtime directories and middleware files are preserved."
+keywords: ["autClaw upgrade", "online update", "IM update command", "middleware", "Docker upgrade"]
 icon: "refresh-cw"
 ---
+
+This page explains how to upgrade the autClaw application version and which files can be overwritten during online updates, first-run bundle downloads, or release bundle updates. For daily upgrades, prefer the web console or an administrator IM command.
 
 ## Recommended: update from the web app
 
@@ -61,3 +63,9 @@ plugin/scripts/middleware/middleware.go
 <Note>
   The default online update source and first-run release bundle target both point to `WGwuzhi/autClaw`.
 </Note>
+
+## Before upgrading
+
+- Do not delete the database, plugin directory, or runtime dependency paths listed in [runtime directories and paths](/en/getting-started/runtime-paths).
+- If you only need to update the Docker runtime base, use [autClaw Docker operations](/en/operations/docker) to pull a new image and recreate the container.
+- After an upgrade, use `docker logs -f autclaw` first when troubleshooting startup issues.

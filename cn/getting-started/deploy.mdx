@@ -1,9 +1,11 @@
 ---
-title: "部署 autClaw"
-description: "使用 Docker bridge 网络在 Linux、飞牛 OS 或群晖上部署 autClaw，并映射 8200 端口和持久化目录。"
-keywords: ["autClaw 部署", "Docker bridge", "飞牛 OS", "群晖 DSM"]
+title: "如何用 Docker 部署 autClaw"
+description: "按步骤在 Linux、飞牛 OS 或群晖 DSM 用 Docker bridge 网络部署 autClaw，映射 8200 端口并保留持久化目录。"
+keywords: ["autClaw 部署", "Docker 部署 autClaw", "Docker bridge", "飞牛 OS", "群晖 DSM"]
 icon: "rocket"
 ---
+
+本页说明如何用官方 Docker 镜像部署 autClaw。你会配置 `8200` 端口、持久化目录和常见 NAS 路径，避免后续升级或重建容器时丢失插件和数据。
 
 ## 准备
 
@@ -106,3 +108,9 @@ docker run -d \
 <Warning>
   不要删除 `/opt/autclaw`、`/vol1/1000/docker/autclaw` 或 `/volume1/docker/autclaw`，除非你明确要清空数据、插件和运行时依赖。
 </Warning>
+
+## 下一步
+
+- 查看 [运行目录和持久化路径](/cn/getting-started/runtime-paths)，确认数据库、插件和依赖目录位置。
+- 使用 [autClaw Docker 运维命令](/cn/operations/docker) 查看日志、更新镜像或重新创建容器。
+- 需要升级应用版本时，按 [如何升级 autClaw](/cn/getting-started/upgrade) 使用 Web 控制台或 IM 命令。

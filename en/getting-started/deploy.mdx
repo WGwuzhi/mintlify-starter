@@ -1,9 +1,11 @@
 ---
-title: "Deploy autClaw"
-description: "Deploy autClaw with Docker bridge networking on Linux, FNOS, or Synology DSM, including port mapping and persistent storage."
-keywords: ["autClaw deployment", "Docker bridge", "FNOS", "Synology DSM"]
+title: "How to deploy autClaw with Docker"
+description: "Deploy autClaw with Docker bridge networking on Linux, FNOS, or Synology DSM, including the 8200 port mapping and persistent storage."
+keywords: ["autClaw deployment", "Docker deploy autClaw", "Docker bridge", "FNOS", "Synology DSM"]
 icon: "rocket"
 ---
+
+This guide shows how to deploy autClaw with the official Docker image. You will configure the `8200` port, persistent storage, and common NAS paths so plugins and data survive upgrades or container recreation.
 
 ## Prepare
 
@@ -107,3 +109,9 @@ docker run -d \
 <Warning>
   Do not delete `/opt/autclaw`, `/vol1/1000/docker/autclaw`, or `/volume1/docker/autclaw` unless you explicitly want to clear data, plugins, and runtime dependencies.
 </Warning>
+
+## Next steps
+
+- Review [runtime directories and paths](/en/getting-started/runtime-paths) for database, plugin, and dependency locations.
+- Use [autClaw Docker operations](/en/operations/docker) to view logs, update images, or recreate the container.
+- When you need an application upgrade, follow [How to upgrade autClaw](/en/getting-started/upgrade).

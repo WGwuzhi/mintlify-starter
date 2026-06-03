@@ -1,9 +1,11 @@
 ---
-title: "Runtime directories and persistent paths"
-description: "Review autClaw persistent directories, plugin paths, file storage, and default ports for Docker and direct runtime modes."
-keywords: ["autClaw runtime paths", "persistent storage", "plugin directory", "default port"]
+title: "autClaw runtime directories and paths"
+description: "Review autClaw database paths, plugin directories, frontend assets, dependency folders, HTTP_ADDR, and the default 8200 port for Docker and direct runs."
+keywords: ["autClaw runtime paths", "persistent storage", "plugin directory", "HTTP_ADDR", "default port"]
 icon: "folder-tree"
 ---
+
+Use this page to confirm which autClaw directories must be persisted. Before recreating a Docker container, moving a NAS directory, or backing up an instance, record the database, plugin, frontend asset, and runtime dependency paths.
 
 ## Docker default paths
 
@@ -42,3 +44,9 @@ The Docker image sets this explicitly:
 ```text
 HTTP_ADDR=:8200
 ```
+
+## Related docs
+
+- For a new instance, follow [How to deploy autClaw with Docker](/en/getting-started/deploy).
+- For container recreation, logs, and update commands, use [autClaw Docker operations](/en/operations/docker).
+- To check which paths are preserved during application upgrades, read [How to upgrade autClaw](/en/getting-started/upgrade).
