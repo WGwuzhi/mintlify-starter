@@ -1,0 +1,32 @@
+---
+title: "autClaw 适配器总览"
+description: "从这里进入适配器开发规范和适配器参考，快速了解 autClaw 适配器的架构、最小落地路径和完整协议。"
+keywords: ["autClaw 适配器总览", "Adapter Gateway", "适配器开发", "适配器参考"]
+icon: "plug"
+---
+
+autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统。先看这里，再进入开发规范或完整参考。
+
+## 你可以先做什么
+
+<CardGroup cols={2}>
+  <Card title="适配器开发规范" icon="rocket" href="/cn/plugin-sdk/adapter-development">
+    看架构边界、最小落地路径和推荐接入模式。
+  </Card>
+  <Card title="适配器参考" icon="book-open" href="/cn/plugin-sdk/adapter-reference">
+    看 control 信封、核心动作、媒体契约和完整示例。
+  </Card>
+</CardGroup>
+
+## 先记住三件事
+
+- **worker** 负责协议适配。
+- **backend** 负责运行编排。
+- **协议专属逻辑** 只放在适配器 worker 内。
+
+## 推荐阅读顺序
+
+1. [`适配器开发规范`](/cn/plugin-sdk/adapter-development)
+2. [`适配器参考`](/cn/plugin-sdk/adapter-reference)
+3. [`插件 manifest 声明头`](/cn/plugin-sdk/manifest)
+

@@ -65,7 +65,17 @@
                 "group": "插件 SDK",
                 "pages": [
                   "cn/plugin-sdk/overview",
-                  "cn/plugin-sdk/adapter-development",
+                  {
+                    "group": "适配器",
+                    "root": "cn/plugin-sdk/adapter",
+                    "directory": "card",
+                    "expanded": true,
+                    "pages": [
+                      "cn/plugin-sdk/adapter-development",
+                      "cn/plugin-sdk/adapter-reference"
+                    ],
+                    "icon": "plug"
+                  },
                   "cn/plugin-sdk/manifest",
                   {
                     "group": "JavaScript 中间件",

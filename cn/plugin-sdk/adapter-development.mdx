@@ -1,44 +1,49 @@
 ---
 title: "适配器插件开发规范"
-description: "参考 autClaw Adapter Gateway V2 和现有 QQ、千寻、飞书适配器，开发可复用的多渠道 IM 适配器插件。"
+description: "了解 autClaw 适配器的边界、最小能力和接入模式。详细协议、字段和示例见参考页。"
 keywords: ["autClaw 适配器", "Adapter Gateway", "多渠道对接", "adapter_worker_ready", "adapter_codec_build_outbound"]
 icon: "plug"
 ---
 
-autClaw 适配器插件负责把外部 IM、机器人框架或官方 SDK 接入 autClaw。你在 `plugin/adapters/` 编写一个独立 worker，把平台原始事件转换成 autClaw 标准事件，再把 autClaw 标准出站动作转换成平台协议包。
+autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统。你在 `plugin/adapters/` 编写独立 worker，把平台事件转成 autClaw 标准事件，再把标准出站动作转成平台协议包。
 
 <Note>
-  本页面面向新 IM 渠道或机器人框架接入。普通业务插件请先看 [`插件 SDK 概览`](/cn/plugin-sdk/overview)。
+  本页只讲架构和最小落地路径。字段、消息信封、回执和完整示例见 [`适配器参考`](/cn/plugin-sdk/adapter-reference)。先从 [`适配器总览`](/cn/plugin-sdk/adapter) 开始更快。普通业务插件请先看 [`插件 SDK 概览`](/cn/plugin-sdk/overview)。
 </Note>
 
-## 适配器边界
+## 先记住三条边界
 
-把协议专属逻辑留在适配器 worker 内，不要把 `QQ`、`飞书`、`微信` 等平台分支写进 autClaw 核心层。
-
-<CardGroup cols={2}>
-  <Card title="worker 负责" icon="plug">
-    解析账号、标准化入站事件、构造出站 payload、解码平台回执、处理登录和平台 workflow。
-  </Card>
-  <Card title="backend 负责" icon="server">
-    启动进程、下发配置、维护 control websocket、接收入站、分发脚本、路由发送账号和记录回执。
-  </Card>
-</CardGroup>
+- **worker** 负责协议适配：账号解析、入站标准化、出站构造、回执解码、登录和平台 workflow。
+- **backend** 负责运行编排：启动进程、下发配置、维护 control websocket、分发消息和记录回执。
+- **协议专属逻辑** 只放在适配器 worker 内，不要写进 autClaw 核心层。
 
 ## 选择接入模式
 
-| 模式 | 适合场景 | 你要实现 | 参考适配器 |
-|---|---|---|---|
-| Gateway 连接 | 平台通过反向 WebSocket 或 Gateway 连接收发，例如 OneBot | `resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt`，`build_outbound` 返回 `transport: "ws"` | `adapter_qq_ws.js` |
-| Worker 自发送 | 平台发送必须调用 HTTP API 或官方 SDK | 核心 codec + `execute_outbound`，`build_outbound` 返回 `executor: "worker"` | `adapter_qx_http.js`、`adapter_fs_ws.js` |
-| 主动事件 | worker 自己维护长连接或 SDK 事件流 | `emit_inbound_events`、`adapter_update_account_state`，必要时用 `request_outbound` 走统一发送链路 | `adapter_fs_ws.js` |
+| 模式 | 适合场景 | 你要实现 |
+|---|---|---|
+| Gateway 连接 | 平台通过反向 WebSocket / Gateway 收发，例如 OneBot | `resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt` |
+| Worker 自发送 | 平台发送必须调用 HTTP API 或官方 SDK | 上述 core codec + `execute_outbound` |
+| 主动事件 | worker 自己维护长连接或 SDK 事件流 | 上述 core codec + `emit_inbound_events`、`adapter_update_account_state` |
 
 <Tip>
-  新渠道优先实现核心 codec：`resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt`。只有当 worker 自己直接调用平台 HTTP API / SDK 完成发送，并能返回平台发送结果时，才在 `adapter_worker_ready` 中把 `execute_outbound` 设为 `true`；如果 worker 只负责把标准动作翻译成平台 payload，或发送由 backend 持有的 Gateway / WebSocket 连接完成，请让 `build_outbound` 返回 `transport: "ws"`，不要启用 `execute_outbound`。
+  新渠道优先做核心 codec：`resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt`。只有当 worker 自己直接调用平台 HTTP API / SDK 完成发送时，才启用 `execute_outbound`；如果发送由 backend 持有的 Gateway / WebSocket 完成，就保持 `transport: "ws"`，不要启用 `execute_outbound`。
 </Tip>
 
-## 文件和 manifest
+## 最小实现顺序
 
-适配器放在 `plugin/adapters/`。推荐文件名使用 `adapter_{im_type}_{transport}.js`，例如 `adapter_demo_http.js`、`adapter_demo_ws.js`。autClaw 会从文件名推断 `adapter_route` 和 `transport`，但你仍应在 manifest 中显式声明关键字段。
+1. 写 manifest：`author`、`im_type`、`transport`、`account_id_key`。
+2. 使用 backend 下发的 `AUTCLAW_ADAPTER_CONNECT_URL` 连接 control websocket。
+3. 收到 `adapter_init` 后，缓存配置并发送 `adapter_worker_ready`。
+4. 实现四个核心动作：
+   - `adapter_codec_resolve_account`
+   - `adapter_codec_normalize_inbound`
+   - `adapter_codec_build_outbound`
+   - `adapter_codec_decode_receipt`
+5. 实测私聊、群聊、媒体、回执和掉线重连。
+
+## manifest 只保留关键字段
+
+适配器放在 `plugin/adapters/`。推荐文件名使用 `adapter_{im_type}_{transport}.js`，例如 `adapter_demo_http.js`、`adapter_demo_ws.js`。autClaw 会根据文件名辅助推断路由，但你仍应在 manifest 中显式声明关键字段。
 
 ```js
 //[title:adapter_demo_http]
@@ -60,622 +65,45 @@ autClaw 适配器插件负责把外部 IM、机器人框架或官方 SDK 接入 
 //[price: 0]
 ```
 
-| 字段 | 必填 | 说明 |
-|---|:---:|---|
-| `author` | 是 | 用于生成稳定 `script_id`。 |
-| `im_type` | 是 | 渠道稳定标识，例如 `qq`、`fs`、`qx`。后续不要随意改名。 |
-| `im_type_name` | 建议 | UI 展示名，例如 `QQ`、`飞书`。 |
-| `protocol` | 建议 | IM 适配器使用 `im`。 |
-| `transport` | 是 | 外部入站方式，常用 `http` 或 `ws`。 |
-| `adapter_route` | 可选 | 公开接入路由 key；未填时通常用 `im_type` 或文件名推断值。 |
-| `account_id_key` | 建议 | 账号配置里用于生成 `account_id` 的字段，例如 `self_id`、`wxid`、`app_id`。 |
-| `receive_token_key` | 可选 | 外部平台请求中携带 token 的 query key，例如 `access_token`、`token`。 |
-| `param` | 按需 | 配置表单。账号级配置写 `"scope":"account"`，全局配置不写或写 `"scope":"global"`。 |
-| `dependency` | 按需 | 运行依赖，例如 `ws`、`axios`、官方 SDK。 |
-| `media` | 按需 | 只有本地 SDK 必须读取文件路径时才声明 `{"requires_file_path":true}`。 |
+| 字段 | 说明 |
+|---|---|
+| `author` | 用于生成稳定 `script_id`。 |
+| `im_type` | 渠道稳定标识，例如 `qq`、`fs`、`qx`。 |
+| `transport` | 外部入站方式，常用 `http` 或 `ws`。 |
+| `account_id_key` | 账号配置里用于生成 `account_id` 的字段。 |
+| `receive_token_key` | 外部平台请求中携带 token 的 query key。 |
+| `param` | 配置表单；账号级配置写 `"scope":"account"`。 |
+| `dependency` | 运行依赖，例如 `ws`、`axios`、官方 SDK。 |
+| `media` | 只有本地 SDK 必须读取文件路径时才声明。 |
 
 更多通用 manifest 字段见 [`插件 manifest 声明头`](/cn/plugin-sdk/manifest)。
 
-## 接入端点和环境变量
+## 生命周期很简单
 
-适配器启动后要连接 backend control websocket。优先使用 backend 下发的环境变量，不要自己拼接 `instance_id`。
+control 连接建立后，backend 会先发 `adapter_init`。你先重建账号索引、恢复配置和临时状态，再发 `adapter_worker_ready`。
 
-```js
-const WebSocket = require('ws')
-
-const IM_TYPE = process.env.AUTCLAW_ADAPTER_IM_TYPE || 'demo'
-const controlURL =
-  process.env.AUTCLAW_ADAPTER_CONNECT_URL ||
-  `ws://127.0.0.1:${process.env.AUTCLAW_PORT || '8200'}/api/adapters/${IM_TYPE}/connect`
-```
-
-| 变量 | 说明 |
+| 阶段 | 你做什么 |
 |---|---|
-| `AUTCLAW_ADAPTER_CONNECT_URL` | 首选 control websocket 地址，通常带 `instance_id`。 |
-| `AUTCLAW_ADAPTER_IM_TYPE` | 当前适配器的 `im_type`。 |
-| `AUTCLAW_ADAPTER_ROUTE_KEY` | 当前公开路由 key。 |
-| `AUTCLAW_ADAPTER_RECEIVE_URL` | 外部平台上报到 autClaw 的地址。 |
-| `AUTCLAW_ADAPTER_RECEIVE_MODE` | manifest 中的 `receive_mode`。 |
-| `AUTCLAW_ADAPTER_RECEIVE_ECHO_KEY` | 回执 echo 字段名，默认 `echo`。 |
-| `AUTCLAW_PORT` | autClaw 服务端口，默认 `8200`。 |
-
-外部平台的入站地址通常是：
-
-```text
-HTTP: http://{autclaw-host}:8200/api/{adapter_route}/receive
-WS:   ws://{autclaw-host}:8200/api/{adapter_route}/receive
-```
-
-Token 读取顺序：`Authorization: Bearer ...`、`receive_token_key` 指定的 query、`access_token`、`token`。如果账号参数使用 `"bind":"ingress_token"`，autClaw 会把该字段保存为账号入站 token。
-
-## Control 消息信封
-
-control websocket 上的业务消息都是 JSON object。backend 和 worker 都可以发起调用。
-
-```json
-{
-  "aut_action": "adapter_codec_build_outbound",
-  "aut_echo": "call_1",
-  "aut_params": {}
-}
-```
-
-成功响应：
-
-```json
-{
-  "aut_echo": "call_1",
-  "ok": true,
-  "aut_params": {}
-}
-```
-
-失败响应：
-
-```json
-{
-  "aut_echo": "call_1",
-  "ok": false,
-  "aut_error": "missing account_id"
-}
-```
-
-要求：
-
-- 响应必须原样返回 `aut_echo`。
-- 响应不要带 `aut_action`。
-- `aut_params` 必须是对象；没有数据时返回 `{}`。
-- 捕获 worker 内部异常，并转成 `ok:false`，不要让读循环崩溃。
-
-## 初始化和能力声明
-
-control 连接建立后，backend 会发送 `adapter_init`。你应先缓存配置、重建账号索引、重置临时状态，再发送 `adapter_worker_ready`。
-
-`adapter_init.aut_params` 的关键字段：
-
-| 字段 | 说明 |
-|---|---|
-| `im_type` / `adapter_route` | 当前适配器标识和公开路由。 |
-| `instance_id` | 当前 worker 实例 ID。只读，不要自行生成。 |
-| `control_endpoint` / `receive_endpoint` | control 和入站接入地址。 |
-| `account_id` / `default_account_id` | 默认发送账号。 |
-| `account_id_key` | 账号配置里用于识别账号的 key。 |
-| `common` | 通用开关、白名单、默认账号等设置。 |
-| `global_config_values` | 全局配置值。 |
-| `account_configs` | 账号配置列表。 |
-
-账号配置示例：
-
-```json
-{
-  "account_id": "2400000000",
-  "alias": "main",
-  "enabled": true,
-  "ingress_token": "***",
-  "schema_values": {
-    "self_id": "2400000000"
-  }
-}
-```
-
-声明能力：
-
-```json
-{
-  "aut_action": "adapter_worker_ready",
-  "aut_params": {
-    "resolve_account": true,
-    "normalize_inbound": true,
-    "build_outbound": true,
-    "decode_receipt": true,
-    "execute_outbound": false,
-    "emit_inbound_events": false,
-    "request_outbound": false
-  }
-}
-```
-
-| 能力 | 对应动作 | 何时开启 |
-|---|---|---|
-| `resolve_account` | `adapter_codec_resolve_account` | 需要从入站请求或连接解析 bot 账号。 |
-| `normalize_inbound` | `adapter_codec_normalize_inbound` | 需要把平台事件转成标准事件。 |
-| `build_outbound` | `adapter_codec_build_outbound` | 需要把标准发送动作转成平台 payload。 |
-| `decode_receipt` | `adapter_codec_decode_receipt` | 平台会返回发送回执或 echo。 |
-| `execute_outbound` | `adapter_execute_outbound` | worker 自己调用平台 API / SDK 完成发送。 |
-| `emit_inbound_events` | `adapter_emit_inbound_events` | worker 自己维护平台长连接并主动上报事件。 |
-| `request_outbound` | `adapter_request_outbound` | worker 的平台 workflow 需要请求 backend 发送标准消息。 |
-
-## 账号解析
-
-实现 `adapter_codec_resolve_account`，从 headers、query 或 `raw_payload` 找到当前 bot 账号。
-
-请求：
-
-```json
-{
-  "aut_action": "adapter_codec_resolve_account",
-  "aut_echo": "call_2",
-  "aut_params": {
-    "im_type": "qq",
-    "transport": "ws",
-    "headers": {"x-self-id": "2400000000"},
-    "query": {"access_token": "***"},
-    "raw_payload": {"self_id": 2400000000},
-    "resolve_hint": {}
-  }
-}
-```
-
-成功响应：
-
-```json
-{
-  "aut_echo": "call_2",
-  "ok": true,
-  "aut_params": {
-    "account_id": "2400000000",
-    "alias": "main",
-    "meta": {
-      "platform": "onebot_v11",
-      "client_role": "universal"
-    }
-  }
-}
-```
-
-规范：
-
-- 成功时 `account_id` 必填，并与账号配置中的 `account_id` 一致。
-- `meta` 只放非敏感字符串，例如平台名、连接角色、短 ID。
-- 解析不到账号时返回 `ok:false` 和可排查的 `aut_error`。
-
-## 入站标准化
-
-实现 `adapter_codec_normalize_inbound`，把平台 payload 转成 `StandardMessageEvent` 数组。字段名使用 Go 结构体字段名，例如 `IMType`、`AccountID`、`EventCategory`。
-
-```json
-{
-  "events": [
-    {
-      "IMType": "qq",
-      "AccountID": "2400000000",
-      "EventType": "message",
-      "EventCategory": "message",
-      "SessionType": "private",
-      "SenderID": "qq:2400000000:private::10001",
-      "UserID": "10001",
-      "UserName": "Alice",
-      "ChatID": "",
-      "Message": "hello",
-      "MessageID": "msg_1",
-      "IsSelf": false,
-      "MediaItems": [],
-      "EventData": {
-        "account_id": "2400000000",
-        "raw_message": "hello"
-      }
-    }
-  ]
-}
-```
-
-| 字段 | 说明 |
-|---|---|
-| `IMType` | 渠道标识，通常等于 manifest `im_type`。 |
-| `AccountID` | 当前 bot 账号 ID。必填。 |
-| `EventType` | 平台事件类型；普通消息用 `message`。 |
-| `EventCategory` | 标准分类：`message`、`notice`、`request`、`meta_event`、`payment`。 |
-| `SessionType` | `private` 或 `group`。 |
-| `SenderID` | 建议使用 `im:account:session:chat:user`。backend 会再次规范化。 |
-| `UserID` / `UserName` | 发送者 ID 和昵称。 |
-| `ChatID` / `ChatName` | 群或会话信息；非群聊时 `ChatID` 留空。 |
-| `Message` | 纯文本内容。没有文本时可留空。 |
-| `MessageID` | 平台消息 ID，用于撤回和历史消息。 |
-| `MediaItems` | 标准媒体数组。 |
-| `HistoryMessageIDs` / `HistoryMessages` | 可选历史上下文。 |
-| `IsAdmin` | 用户是否管理员。 |
-| `IsSelf` | 是否 bot 自己发出的消息。 |
-| `EventData` | 小体积补充字段。建议包含 `account_id`。 |
-
-媒体项格式：
-
-```json
-{
-  "type": "image",
-  "source": "https://example.com/a.png",
-  "file_path": "",
-  "source_kind": "http",
-  "name": "a.png",
-  "mime_type": "image/png",
-  "platform_payload": {}
-}
-```
-
-## 出站构造
-
-实现 `adapter_codec_build_outbound`，把 autClaw 标准动作转成平台 payload。
-
-请求：
-
-```json
-{
-  "request_id": "egress_xxx",
-  "im_type": "qq",
-  "account_id": "2400000000",
-  "action": "sendText",
-  "session_type": "private",
-  "chat_id": "",
-  "user_id": "10001",
-  "payload": {
-    "text": "hello",
-    "content": "hello",
-    "message": "hello"
-  }
-}
-```
-
-Gateway 型返回：
-
-```json
-{
-  "transport": "ws",
-  "await_receipt": true,
-  "raw_payload": {
-    "action": "send_private_msg",
-    "params": {
-      "user_id": "10001",
-      "message": [{"type": "text", "data": {"text": "hello"}}]
-    },
-    "echo": "egress_xxx"
-  }
-}
-```
-
-Worker 自发送返回：
-
-```json
-{
-  "executor": "worker",
-  "await_receipt": false,
-  "raw_payload": {
-    "kind": "send",
-    "request_id": "egress_xxx",
-    "account_id": "bot_1",
-    "target_id": "10001",
-    "operations": [{"kind": "text", "text": "hello"}]
-  }
-}
-```
-
-| 标准动作 | payload 约定 |
-|---|---|
-| `sendText` | `text`、`content` 或 `message`。 |
-| `sendMarkdown` | `markdown`，可兼容 `text` / `content`。 |
-| `sendImage` | `media: {"type":"image","source":"..."}`。 |
-| `sendVoice` | `media: {"type":"voice","source":"..."}`。 |
-| `sendVideo` | `media: {"type":"video","source":"..."}`。 |
-| `sendFile` | `media: {"type":"file","source":"...","name":"..."}`。 |
-| `sendMixed` | `items`、`message_items` 或 `messageItems` 数组。 |
-| `recall` / `recallMessage` | `message_id` 或 `messageid`。 |
-| `approveFriendRequest` | 平台好友请求参数，例如 `flag`、`approve`、`user_id`。 |
-| `getGroupMemberList` | 群 ID，例如 `group_id` 或 `chat_id`。 |
-
-目标规则：
-
-- 群消息使用 `session_type: "group"` + `chat_id`。
-- 私聊消息使用 `session_type: "private"` + `user_id`。
-- 需要回执时，把 `request_id` 写入平台 `echo`、`nonce` 或等价字段。
-
-## 出站执行和回执
-
-如果 `build_outbound` 返回 `executor: "worker"`，backend 会调用 `adapter_execute_outbound`。
-
-```json
-{
-  "aut_action": "adapter_execute_outbound",
-  "aut_echo": "call_3",
-  "aut_params": {
-    "request_id": "egress_xxx",
-    "im_type": "fs",
-    "account_id": "app_1",
-    "raw_payload": {"kind": "send"}
-  }
-}
-```
-
-响应：
-
-```json
-{
-  "ok": true,
-  "data": {
-    "request_id": "egress_xxx",
-    "message_id": "msg_xxx"
-  }
-}
-```
-
-注意两层 `ok`：外层 `ok` 表示 control RPC 是否成功；`aut_params.ok` 表示平台发送是否成功。
-
-Gateway 型适配器要实现 `adapter_codec_decode_receipt`：
-
-```json
-{
-  "matched": true,
-  "request_id": "egress_xxx",
-  "ok": true,
-  "data": {
-    "message_id": "123"
-  }
-}
-```
-
-如果 payload 不是回执，返回 `{"matched":false}`，backend 会继续按普通入站事件处理。
-
-## Worker 主动动作
-
-| 动作 | 何时使用 | 要求 |
-|---|---|---|
-| `adapter_emit_inbound_events` | worker 自己收到平台事件，例如官方 SDK 长连接 | `events` 每项必须有 `AccountID`。高频事件要分批和限流。 |
-| `adapter_request_outbound` | worker 在平台 workflow 中需要发送标准消息，例如自动同意好友后回复 | 会重新进入标准发送链路，避免同步等待造成死锁。 |
-| `adapter_update_account_state` | 登录成功、掉线、心跳或账号不可发送 | `account_id` 必填；`last_heartbeat` 用 RFC3339 时间。 |
-
-主动发送示例：
-
-```json
-{
-  "aut_action": "adapter_request_outbound",
-  "aut_echo": "worker_req_1",
-  "aut_params": {
-    "im_type": "qq",
-    "action": "sendText",
-    "account_id": "2400000000",
-    "session_type": "private",
-    "user_id": "10001",
-    "payload": {"text": "好友已通过"}
-  }
-}
-```
-
-账号状态示例：
-
-```json
-{
-  "aut_action": "adapter_update_account_state",
-  "aut_echo": "state_1",
-  "aut_params": {
-    "im_type": "fs",
-    "account_id": "app_1",
-    "status": "online",
-    "message": "已连接",
-    "last_error": "",
-    "last_heartbeat": "2026-06-20T00:00:00Z",
-    "sendable": true,
-    "meta": {"platform": "fs"}
-  }
-}
-```
-
-可选二维码登录动作使用同一信封：`adapter_login_qr_start`、`adapter_login_qr_wait`。不支持二维码登录的适配器不要实现这些动作。
-
-## 媒体发送契约
-
-普通插件调用 `replyImage`、`replyVoice`、`replyVideo`、`replyFile` 或 `replyMixed` 后，backend 会把媒体放进出站 `payload.media` 或 `payload.items`。
-
-默认不要声明：
-
-```js
-//[media: {"requires_file_path":true}]
-```
-
-默认模式下，backend 会尽量把本地文件转换成临时 URL，再传给 worker：
-
-```json
-{
-  "media": {
-    "type": "video",
-    "source": "https://public.example.com/api/plugins/runtime/media/temp/token/demo.mp4",
-    "name": "demo.mp4",
-    "source_kind": "local_path"
-  }
-}
-```
-
-只有 worker 与 backend 共用文件系统，且平台 SDK 必须读取本地文件时，才声明本地文件路径模式：
-
-```js
-//[media: {"requires_file_path":true}]
-```
-
-这时 backend 会提供 `file_path`：
-
-```json
-{
-  "media": {
-    "type": "image",
-    "source": "base64://aGk=",
-    "file_path": "/opt/autclaw/plugin/.media/.../image.png",
-    "name": "image.png",
-    "source_kind": "base64_payload"
-  }
-}
-```
-
-处理规则：
-
-- 优先读取 `media.source`。
-- 只有声明 `requires_file_path` 后才读取 `media.file_path`。
-- 支持 `http://`、`https://`、`data:`、`base64://`、平台 file key 和临时资源 URL。
-- 文件发送要保留 `name` / `file_name` 和 `mime_type`。
-- 不要把 `/root/...`、`/opt/autclaw/...` 这类本地路径发给远端平台。
-
-## 最小 Node.js 框架
-
-```js
-const WebSocket = require('ws')
-
-const IM_TYPE = process.env.AUTCLAW_ADAPTER_IM_TYPE || 'demo'
-const controlURL =
-  process.env.AUTCLAW_ADAPTER_CONNECT_URL ||
-  `ws://127.0.0.1:${process.env.AUTCLAW_PORT || '8200'}/api/adapters/${IM_TYPE}/connect`
-
-let controlSocket = null
-let initPayload = {}
-let readySent = false
-
-function text(value) {
-  return value === undefined || value === null ? '' : String(value).trim()
-}
-
-function sendJSON(ws, payload) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) throw new Error('control websocket is not open')
-  ws.send(JSON.stringify(payload))
-}
-
-function replyWithEcho(ws, message, params, error) {
-  const response = { aut_echo: text(message && message.aut_echo), ok: !error }
-  if (error) response.aut_error = text(error.message || error) || 'worker call failed'
-  else response.aut_params = params && typeof params === 'object' ? params : {}
-  sendJSON(ws, response)
-}
-
-function emitReady(ws) {
-  if (readySent) return
-  readySent = true
-  sendJSON(ws, {
-    aut_action: 'adapter_worker_ready',
-    aut_params: {
-      resolve_account: true,
-      normalize_inbound: true,
-      build_outbound: true,
-      decode_receipt: true,
-      execute_outbound: false,
-      emit_inbound_events: false,
-      request_outbound: false,
-    },
-  })
-}
-
-function applyAdapterInit(message) {
-  initPayload = message.aut_params && typeof message.aut_params === 'object' ? message.aut_params : {}
-  // 缓存 global_config_values，重建 account_configs 索引，重置临时状态。
-}
-
-function handleResolveAccount(message) {
-  const params = message.aut_params || {}
-  const payload = params.raw_payload || {}
-  const accountID = text(payload.bot_id || payload.self_id || params.account_id)
-  if (!accountID) throw new Error('missing account_id')
-  return { account_id: accountID, meta: { platform: IM_TYPE } }
-}
-
-function handleNormalizeInbound(message) {
-  const params = message.aut_params || {}
-  const payload = params.raw_payload || {}
-  const accountID = text(params.account_id || payload.bot_id || payload.self_id)
-  const userID = text(payload.user_id)
-  return {
-    events: [{
-      IMType: IM_TYPE,
-      AccountID: accountID,
-      EventType: 'message',
-      EventCategory: 'message',
-      SessionType: 'private',
-      SenderID: `${IM_TYPE}:${accountID}:private::${userID}`,
-      UserID: userID,
-      Message: text(payload.text || payload.message),
-      MessageID: text(payload.message_id),
-      IsSelf: accountID && userID && accountID === userID,
-      MediaItems: [],
-      EventData: { account_id: accountID },
-    }],
-  }
-}
-
-function handleBuildOutbound(message) {
-  const params = message.aut_params || {}
-  const payload = params.payload || {}
-  return {
-    transport: 'ws',
-    await_receipt: true,
-    raw_payload: {
-      type: 'send_text',
-      to: text(params.user_id || params.chat_id),
-      text: text(payload.text || payload.content || payload.message),
-      echo: text(params.request_id),
-    },
-  }
-}
-
-function handleDecodeReceipt() {
-  return { matched: false }
-}
-
-function handleWorkerMessage(ws, message) {
-  const action = text(message && message.aut_action)
-  if (action === 'adapter_init') {
-    applyAdapterInit(message)
-    emitReady(ws)
-    return
-  }
-  if (!text(message && message.aut_echo)) return
-
-  Promise.resolve().then(() => {
-    switch (action) {
-      case 'adapter_codec_resolve_account':
-        return replyWithEcho(ws, message, handleResolveAccount(message))
-      case 'adapter_codec_normalize_inbound':
-        return replyWithEcho(ws, message, handleNormalizeInbound(message))
-      case 'adapter_codec_build_outbound':
-        return replyWithEcho(ws, message, handleBuildOutbound(message))
-      case 'adapter_codec_decode_receipt':
-        return replyWithEcho(ws, message, handleDecodeReceipt(message))
-      default:
-        throw new Error(`unsupported action: ${action}`)
-    }
-  }).catch((error) => replyWithEcho(ws, message, null, error))
-}
-
-function connectControl() {
-  const ws = new WebSocket(controlURL)
-  controlSocket = ws
-  readySent = false
-  ws.on('message', (data) => handleWorkerMessage(ws, JSON.parse(String(data || '{}'))))
-  ws.on('close', () => setTimeout(connectControl, 1000))
-}
-
-connectControl()
-```
-
-## 发布前检查
-
-- manifest 至少包含 `author`、`im_type`、`transport` 和必要 `param`；建议设置 `account_id_key`。
-- 收到 `adapter_init` 后再处理平台业务消息。
-- 所有带 `aut_echo` 的调用都能响应成功或失败。
-- 主动调用 backend 时维护 pending map，并设置超时，建议 15 秒。
-- control 断开时清理 pending 调用并退避重连。
-- `EventData`、`meta` 和日志不要包含 token、密码、私钥、验证码或完整签名。
-- HTTP API 调用设置超时，批量事件限流分批。
-- 媒体发送优先使用 `source`，只有本地 SDK 适配器才读取 `file_path`。
-- `request_id` 能和平台回执稳定匹配。
-- 群聊、私聊、媒体、撤回、账号离线和平台错误都要做实测。
+| `adapter_init` | 读取 `account_configs`、`global_config_values`、`common`、`instance_id` 等初始化数据。 |
+| `adapter_worker_ready` | 声明当前 worker 支持的能力。 |
+| 业务 RPC | 处理账号解析、入站标准化、出站构造、回执解码和主动动作。 |
+
+## 详细协议见参考页
+
+如果你要实现完整适配器，请继续看 [`适配器参考`](/cn/plugin-sdk/adapter-reference)：
+
+- control 消息信封
+- 账号解析
+- 入站标准化
+- 出站构造与回执
+- 主动事件和账号状态
+- 媒体发送契约
+- 最小 Node.js 框架
+
+## 发布前只检查这些
+
+- `adapter_init` 后再处理平台业务消息。
+- 所有带 `aut_echo` 的调用都能返回成功或失败。
+- `EventData`、`meta` 和日志不包含 token、密码、私钥、验证码或完整签名。
+- HTTP API 调用设置超时，批量事件分批处理。
+- 媒体发送优先使用 `source`，只有本地 SDK 才读取 `file_path`。
