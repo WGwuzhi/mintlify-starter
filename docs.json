@@ -65,6 +65,7 @@
                 "group": "插件 SDK",
                 "pages": [
                   "cn/plugin-sdk/overview",
+                  "cn/plugin-sdk/adapter-development",
                   "cn/plugin-sdk/manifest",
                   {
                     "group": "JavaScript 中间件",
