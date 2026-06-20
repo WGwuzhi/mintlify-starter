@@ -33,7 +33,7 @@ autClaw 适配器插件负责把外部 IM、机器人框架或官方 SDK 接入 
 | 主动事件 | worker 自己维护长连接或 SDK 事件流 | `emit_inbound_events`、`adapter_update_account_state`，必要时用 `request_outbound` 走统一发送链路 | `adapter_fs_ws.js` |
 
 <Tip>
-  新渠道优先实现核心 codec。只有 worker 确实能完成发送时，才启用 `execute_outbound`。
+  新渠道优先实现核心 codec：`resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt`。只有当 worker 自己直接调用平台 HTTP API / SDK 完成发送，并能返回平台发送结果时，才在 `adapter_worker_ready` 中把 `execute_outbound` 设为 `true`；如果 worker 只负责把标准动作翻译成平台 payload，或发送由 backend 持有的 Gateway / WebSocket 连接完成，请让 `build_outbound` 返回 `transport: "ws"`，不要启用 `execute_outbound`。
 </Tip>
 
 ## 文件和 manifest
