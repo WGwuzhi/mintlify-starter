@@ -24,6 +24,7 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
 | Gateway 连接 | 平台通过反向 WebSocket / Gateway 收发，例如 OneBot | `resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt` |
 | Worker 自发送 | 平台发送必须调用 HTTP API 或官方 SDK | 上述 core codec + `execute_outbound` |
 | 主动事件 | worker 自己维护长连接或 SDK 事件流 | 上述 core codec + `emit_inbound_events`、`adapter_update_account_state` |
+| 扫码登录 | 平台账号需要扫码授权或绑定 | 上述 core codec + `login_qr` + `adapter_login_qr_start`、`adapter_login_qr_wait` |
 
 <Tip>
   新渠道优先做核心 codec：`resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt`。只有当 worker 自己直接调用平台 HTTP API / SDK 完成发送时，才启用 `execute_outbound`；如果发送由 backend 持有的 Gateway / WebSocket 完成，就保持 `transport: "ws"`，不要启用 `execute_outbound`。
@@ -39,7 +40,8 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
    - `adapter_codec_normalize_inbound`
    - `adapter_codec_build_outbound`
    - `adapter_codec_decode_receipt`
-5. 实测私聊、群聊、媒体、回执和掉线重连。
+5. 如果适配器支持扫码登录，在 `adapter_worker_ready` 里上报 `login_qr: true`，并实现 `adapter_login_qr_start`、`adapter_login_qr_wait`。
+6. 实测私聊、群聊、媒体、回执和掉线重连；如果支持扫码登录，再实测扫码流程。
 
 ## manifest 只保留关键字段
 
@@ -76,6 +78,10 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
 | `dependency` | 运行依赖，例如 `ws`、`axios`、官方 SDK。 |
 | `media` | 只有本地 SDK 必须读取文件路径时才声明。 |
 
+<Info>
+  `login_qr` 不是 manifest 头部字段。manifest 描述“这个插件是谁、参数是什么”；`adapter_worker_ready` 描述“这个运行中的 worker 现在能做什么”。
+</Info>
+
 更多通用 manifest 字段见 [`插件 manifest 声明头`](/cn/plugin-sdk/manifest)。
 
 ## 生命周期很简单
@@ -85,8 +91,50 @@ control 连接建立后，backend 会先发 `adapter_init`。你先重建账号�
 | 阶段 | 你做什么 |
 |---|---|
 | `adapter_init` | 读取 `account_configs`、`global_config_values`、`common`、`instance_id` 等初始化数据。 |
-| `adapter_worker_ready` | 声明当前 worker 支持的能力。 |
+| `adapter_worker_ready` | 声明当前 worker 支持的能力，例如核心 codec、worker 自发送、主动事件和可选的 `login_qr`。 |
 | 业务 RPC | 处理账号解析、入站标准化、出站构造、回执解码和主动动作。 |
+
+## 声明扫码登录能力
+
+扫码登录属于运行能力，不写在插件头部注释里。只有适配器启动、连上 control websocket，并确认当前 worker 能处理扫码流程后，才在 `adapter_worker_ready` 中声明。
+
+```js
+function emitWorkerReady(ws) {
+  ws.send(JSON.stringify({
+    aut_action: 'adapter_worker_ready',
+    aut_params: {
+      resolve_account: true,
+      normalize_inbound: true,
+      build_outbound: true,
+      decode_receipt: true,
+      execute_outbound: true,
+
+      // 只有支持扫码登录的适配器才写这一项
+      login_qr: true,
+    },
+  }))
+}
+```
+
+然后处理两个 backend 下发的 action：
+
+```js
+switch (message.aut_action) {
+  case 'adapter_login_qr_start':
+    replyWithEcho(ws, message, await handleLoginQRStart(message))
+    return
+
+  case 'adapter_login_qr_wait':
+    replyWithEcho(ws, message, await handleLoginQRWait(message))
+    return
+}
+```
+
+要求：
+
+- 不支持扫码登录的适配器不要上报 `login_qr: true`。
+- 已上报 `login_qr: true` 的适配器必须能响应 `adapter_login_qr_start` 和 `adapter_login_qr_wait`。
+- 扫码成功后，`adapter_login_qr_wait` 可以返回 `account_config`，backend 会把账号配置写入适配器设置。
 
 ## 详细协议见参考页
 
@@ -96,6 +144,7 @@ control 连接建立后，backend 会先发 `adapter_init`。你先重建账号�
 - 账号解析
 - 入站标准化
 - 出站构造与回执
+- 扫码登录
 - 主动事件和账号状态
 - 媒体发送契约
 - 最小 Node.js 框架

@@ -1,7 +1,7 @@
 ---
 title: "适配器参考"
 description: "适配器 control 信封、核心动作、回执、主动事件和媒体契约的完整参考。"
-keywords: ["adapter_init", "adapter_worker_ready", "adapter_codec_resolve_account", "StandardMessageEvent", "aut_echo"]
+keywords: ["adapter_init", "adapter_worker_ready", "adapter_login_qr_start", "adapter_login_qr_wait", "adapter_codec_resolve_account", "StandardMessageEvent", "aut_echo"]
 icon: "book-open"
 ---
 
@@ -88,6 +88,7 @@ control 连接建立后，backend 会发送 `adapter_init`。你应先缓存配�
     "build_outbound": true,
     "decode_receipt": true,
     "execute_outbound": false,
+    "login_qr": false,
     "emit_inbound_events": false,
     "request_outbound": false
   }
@@ -101,8 +102,13 @@ control 连接建立后，backend 会发送 `adapter_init`。你应先缓存配�
 | `build_outbound` | `adapter_codec_build_outbound` | 需要把标准发送动作转成平台 payload。 |
 | `decode_receipt` | `adapter_codec_decode_receipt` | 平台会返回发送回执或 echo。 |
 | `execute_outbound` | `adapter_execute_outbound` | worker 自己调用平台 API / SDK 完成发送。 |
+| `login_qr` | `adapter_login_qr_start`、`adapter_login_qr_wait` | worker 支持扫码登录或扫码绑定账号。 |
 | `emit_inbound_events` | `adapter_emit_inbound_events` | worker 自己维护平台长连接并主动上报事件。 |
 | `request_outbound` | `adapter_request_outbound` | worker 的平台 workflow 需要请求 backend 发送标准消息。 |
+
+<Note>
+  `login_qr` 是运行时能力，只能放在 `adapter_worker_ready.aut_params`。不要把它写成插件头部 manifest 注释。
+</Note>
 
 ## 账号解析
 
@@ -335,6 +341,109 @@ Gateway 型适配器要实现 `adapter_codec_decode_receipt`：
 
 如果 payload 不是回执，返回 `{"matched":false}`，backend 会继续按普通入站事件处理。
 
+## 扫码登录
+
+支持扫码登录的适配器需要先完成核心 codec，并在 `adapter_worker_ready` 中上报 `login_qr: true`。backend 只会向已上报该能力的在线 worker 调用扫码动作。
+
+启动扫码：
+
+```json
+{
+  "aut_action": "adapter_login_qr_start",
+  "aut_echo": "call_qr_1",
+  "aut_params": {
+    "account_id": "",
+    "session_key": "",
+    "force": false
+  }
+}
+```
+
+返回二维码信息：
+
+```json
+{
+  "aut_echo": "call_qr_1",
+  "ok": true,
+  "aut_params": {
+    "session_key": "qr_session_1",
+    "qr_code_url": "https://example.com/qr.png",
+    "message": "用手机扫描二维码。",
+    "issued_at": 1783353600
+  }
+}
+```
+
+等待扫码结果：
+
+```json
+{
+  "aut_action": "adapter_login_qr_wait",
+  "aut_echo": "call_qr_2",
+  "aut_params": {
+    "account_id": "",
+    "session_key": "qr_session_1",
+    "timeout_ms": 30000
+  }
+}
+```
+
+未完成时返回当前状态：
+
+```json
+{
+  "aut_echo": "call_qr_2",
+  "ok": true,
+  "aut_params": {
+    "connected": false,
+    "status": "wait",
+    "message": "等待扫码。",
+    "qr_code_url": "https://example.com/qr.png",
+    "issued_at": 1783353600
+  }
+}
+```
+
+扫码成功时返回账号配置：
+
+```json
+{
+  "aut_echo": "call_qr_2",
+  "ok": true,
+  "aut_params": {
+    "connected": true,
+    "status": "confirmed",
+    "message": "连接成功。",
+    "account_id": "bot_1",
+    "account_config": {
+      "account_id": "bot_1",
+      "alias": "主账号",
+      "enabled": true,
+      "schema_values": {
+        "token": "***"
+      }
+    }
+  }
+}
+```
+
+字段约定：
+
+| 字段 | 说明 |
+|---|---|
+| `session_key` | 一次扫码流程的会话 key。`start` 返回后，`wait` 必须带回。 |
+| `force` | 为 `true` 时强制生成新的二维码。 |
+| `timeout_ms` | 单次等待超时。worker 应设置下限，避免长时间阻塞 control 调用。 |
+| `connected` | 是否已完成扫码并拿到账号凭证。 |
+| `status` | 建议使用 `wait`、`scanned`、`confirmed`、`expired` 或 `error`；也可以透传平台状态。 |
+| `account_config` | 扫码成功后可返回账号配置；backend 会持久化到适配器设置。 |
+
+要求：
+
+- 不支持扫码登录的适配器不要上报 `login_qr: true`，也不需要实现这两个 action。
+- 已上报 `login_qr: true` 时，两个 action 都必须通过 control 信封响应，并原样返回 `aut_echo`。
+- `account_config.schema_values` 不要写入无关字段；日志和 `message` 不要泄露 token、密码、私钥、验证码或完整签名。
+
 ## 主动动作
 
 | 动作 | 何时使用 | 要求 |
@@ -379,7 +488,7 @@ Gateway 型适配器要实现 `adapter_codec_decode_receipt`：
 }
 ```
 
-可选二维码登录动作使用同一信封：`adapter_login_qr_start`、`adapter_login_qr_wait`。不支持二维码登录的适配器不要实现这些动作。
+扫码登录动作也使用同一 control 信封，见上方“扫码登录”。
 
 ## 媒体发送契约
 
@@ -471,6 +580,7 @@ function emitReady(ws) {
       build_outbound: true,
       decode_receipt: true,
       execute_outbound: false,
+      login_qr: false,
       emit_inbound_events: false,
       request_outbound: false,
     },
