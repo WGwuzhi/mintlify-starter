@@ -103,6 +103,7 @@
     "receive_echo_key": { "type": "string" },
     "receive_token_key": { "type": "string" },
     "account_id_key": { "type": "string" },
+    "supports_qr_login": { "type": "boolean" },
     "media": {
       "oneOf": [
         { "$ref": "#/$defs/adapterMediaPolicy" },

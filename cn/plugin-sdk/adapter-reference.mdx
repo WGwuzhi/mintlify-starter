@@ -88,7 +88,7 @@ control 连接建立后，backend 会发送 `adapter_init`。你应先缓存配�
     "build_outbound": true,
     "decode_receipt": true,
     "execute_outbound": false,
-    "login_qr": false,
+    "supports_qr_login": false,
     "emit_inbound_events": false,
     "request_outbound": false
   }
@@ -102,12 +102,17 @@ control 连接建立后，backend 会发送 `adapter_init`。你应先缓存配�
 | `build_outbound` | `adapter_codec_build_outbound` | 需要把标准发送动作转成平台 payload。 |
 | `decode_receipt` | `adapter_codec_decode_receipt` | 平台会返回发送回执或 echo。 |
 | `execute_outbound` | `adapter_execute_outbound` | worker 自己调用平台 API / SDK 完成发送。 |
-| `login_qr` | `adapter_login_qr_start`、`adapter_login_qr_wait` | worker 支持扫码登录或扫码绑定账号。 |
+| `supports_qr_login` | `adapter_login_qr_start`、`adapter_login_qr_wait` | 当前在线 worker 支持扫码登录或扫码绑定账号。 |
 | `emit_inbound_events` | `adapter_emit_inbound_events` | worker 自己维护平台长连接并主动上报事件。 |
 | `request_outbound` | `adapter_request_outbound` | worker 的平台 workflow 需要请求 backend 发送标准消息。 |
 
 <Note>
-  `login_qr` 是运行时能力，只能放在 `adapter_worker_ready.aut_params`。不要把它写成插件头部 manifest 注释。
+  `supports_qr_login` 有两层：
+
+  - manifest 头注 `//[supports_qr_login: true]`：声明适配器提供扫码登录入口，供设置页展示。
+  - `adapter_worker_ready.aut_params.supports_qr_login`：声明当前在线 worker 真正支持扫码动作。
+
+  backend 真正发起 `adapter_login_qr_start`、`adapter_login_qr_wait` 前，只检查第二层运行时能力。
 </Note>
 
 ## 账号解析
@@ -343,7 +348,7 @@ Gateway 型适配器要实现 `adapter_codec_decode_receipt`：
 
 ## 扫码登录
 
-支持扫码登录的适配器需要先完成核心 codec，并在 `adapter_worker_ready` 中上报 `login_qr: true`。backend 只会向已上报该能力的在线 worker 调用扫码动作。
+支持扫码登录的适配器需要先完成核心 codec，在 manifest 中声明 `//[supports_qr_login: true]` 作为入口提示，并在 `adapter_worker_ready` 中上报 `supports_qr_login: true`。backend 只会向已上报运行时能力的在线 worker 调用扫码动作。
 
 启动扫码：
 
@@ -440,8 +445,9 @@ Gateway 型适配器要实现 `adapter_codec_decode_receipt`：
 
 要求：
 
-- 不支持扫码登录的适配器不要上报 `login_qr: true`，也不需要实现这两个 action。
-- 已上报 `login_qr: true` 时，两个 action 都必须通过 control 信封响应，并原样返回 `aut_echo`。
+- 不支持扫码登录的适配器不要声明 `//[supports_qr_login: true]`，也不要上报 `supports_qr_login: true`。
+- 只声明 manifest 头注会显示入口，但 backend 仍不会调用扫码动作。
+- 已上报 `supports_qr_login: true` 时，两个 action 都必须通过 control 信封响应，并原样返回 `aut_echo`。
 - `account_config.schema_values` 不要写入无关字段；日志和 `message` 不要泄露 token、密码、私钥、验证码或完整签名。
 
 ## 主动动作
@@ -580,7 +586,7 @@ function emitReady(ws) {
       build_outbound: true,
       decode_receipt: true,
       execute_outbound: false,
-      login_qr: false,
+      supports_qr_login: false,
       emit_inbound_events: false,
       request_outbound: false,
     },

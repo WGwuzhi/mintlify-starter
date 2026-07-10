@@ -68,6 +68,19 @@ Manifest headers 是插件文件顶部的注释声明。autClaw 读取这些声�
 | `admin` | 否 | `true` | 仅管理员可触发。 |
 | `priority` | 否 | `10` | 触发优先级，数字越高越优先。 |
 
+## 适配器补充字段
+
+这些头注主要给 `plugin/adapters/` 下的适配器 worker 使用。完整接入流程见 [`适配器插件开发规范`](/cn/plugin-sdk/adapter-development)。
+
+| Header | 示例 | 作用 |
+|---|---|---|
+| `im_type` | `qq` | 渠道稳定标识。 |
+| `transport` | `ws`、`http` | 外部入站传输方式。 |
+| `account_id_key` | `bot_id` | 账号配置里用于生成 `account_id` 的字段。 |
+| `receive_token_key` | `token` | 外部平台请求里 token 的 query key。 |
+| `supports_qr_login` | `true` | 声明适配器提供扫码登录入口。它只影响设置页入口展示；真正发起扫码流程还要求当前 worker 在 `adapter_worker_ready.aut_params.supports_qr_login` 中同步声明运行时能力。 |
+| `media` | `{"requires_file_path":true}` | 只有本地 SDK 必须读取文件路径时才声明。 |
+
 ## 消息触发：rule
 
 `rule` 用来匹配用户消息。你可以写多个 `rule`。

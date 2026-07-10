@@ -24,7 +24,7 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
 | Gateway 连接 | 平台通过反向 WebSocket / Gateway 收发，例如 OneBot | `resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt` |
 | Worker 自发送 | 平台发送必须调用 HTTP API 或官方 SDK | 上述 core codec + `execute_outbound` |
 | 主动事件 | worker 自己维护长连接或 SDK 事件流 | 上述 core codec + `emit_inbound_events`、`adapter_update_account_state` |
-| 扫码登录 | 平台账号需要扫码授权或绑定 | 上述 core codec + `login_qr` + `adapter_login_qr_start`、`adapter_login_qr_wait` |
+| 扫码登录 | 平台账号需要扫码授权或绑定 | manifest 头注 `supports_qr_login` + worker ready `supports_qr_login` + `adapter_login_qr_start`、`adapter_login_qr_wait` |
 
 <Tip>
   新渠道优先做核心 codec：`resolve_account`、`normalize_inbound`、`build_outbound`、`decode_receipt`。只有当 worker 自己直接调用平台 HTTP API / SDK 完成发送时，才启用 `execute_outbound`；如果发送由 backend 持有的 Gateway / WebSocket 完成，就保持 `transport: "ws"`，不要启用 `execute_outbound`。
@@ -40,7 +40,7 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
    - `adapter_codec_normalize_inbound`
    - `adapter_codec_build_outbound`
    - `adapter_codec_decode_receipt`
-5. 如果适配器支持扫码登录，在 `adapter_worker_ready` 里上报 `login_qr: true`，并实现 `adapter_login_qr_start`、`adapter_login_qr_wait`。
+5. 如果适配器支持扫码登录，在 manifest 里声明 `//[supports_qr_login: true]`，并在 `adapter_worker_ready` 里上报 `supports_qr_login: true`，再实现 `adapter_login_qr_start`、`adapter_login_qr_wait`。
 6. 实测私聊、群聊、媒体、回执和掉线重连；如果支持扫码登录，再实测扫码流程。
 
 ## manifest 只保留关键字段
@@ -59,6 +59,7 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
 //[protocol: im]
 //[transport: http]
 //[account_id_key: bot_id]
+//[supports_qr_login: true]
 //[receive_token_key: token]
 //[dependency: {"name":"ws"}]
 //[param: {"scope":"account","required":true,"key":"bot_id","name":"Bot ID","desc":"平台机器人账号 ID，同时作为 autClaw account_id"}]
@@ -73,13 +74,14 @@ autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统�
 | `im_type` | 渠道稳定标识，例如 `qq`、`fs`、`qx`。 |
 | `transport` | 外部入站方式，常用 `http` 或 `ws`。 |
 | `account_id_key` | 账号配置里用于生成 `account_id` 的字段。 |
+| `supports_qr_login` | 适配器声明自己提供扫码登录入口。这个头注只影响设置页入口展示，不代表当前 worker 已在线或一定能执行扫码动作。 |
 | `receive_token_key` | 外部平台请求中携带 token 的 query key。 |
 | `param` | 配置表单；账号级配置写 `"scope":"account"`。 |
 | `dependency` | 运行依赖，例如 `ws`、`axios`、官方 SDK。 |
 | `media` | 只有本地 SDK 必须读取文件路径时才声明。 |
 
 <Info>
-  `login_qr` 不是 manifest 头部字段。manifest 描述“这个插件是谁、参数是什么”；`adapter_worker_ready` 描述“这个运行中的 worker 现在能做什么”。
+  `supports_qr_login` 分成两层：manifest 头注 `//[supports_qr_login: true]` 只声明“这个适配器有扫码登录入口”；`adapter_worker_ready.aut_params.supports_qr_login` 才声明“这个在线 worker 现在能处理扫码动作”。
 </Info>
 
 更多通用 manifest 字段见 [`插件 manifest 声明头`](/cn/plugin-sdk/manifest)。
@@ -91,12 +93,15 @@ control 连接建立后，backend 会先发 `adapter_init`。你先重建账号�
 | 阶段 | 你做什么 |
 |---|---|
 | `adapter_init` | 读取 `account_configs`、`global_config_values`、`common`、`instance_id` 等初始化数据。 |
-| `adapter_worker_ready` | 声明当前 worker 支持的能力，例如核心 codec、worker 自发送、主动事件和可选的 `login_qr`。 |
+| `adapter_worker_ready` | 声明当前 worker 支持的能力，例如核心 codec、worker 自发送、主动事件和可选的 `supports_qr_login`。 |
 | 业务 RPC | 处理账号解析、入站标准化、出站构造、回执解码和主动动作。 |
 
 ## 声明扫码登录能力
 
-扫码登录属于运行能力，不写在插件头部注释里。只有适配器启动、连上 control websocket，并确认当前 worker 能处理扫码流程后，才在 `adapter_worker_ready` 中声明。
+扫码登录在 autClaw 里分成“入口能力”和“运行能力”两层：
+
+- manifest 头注 `//[supports_qr_login: true]`：让设置页在适配器未启用或 worker 未连上时也能显示“扫码登录”入口。
+- `adapter_worker_ready.aut_params.supports_qr_login: true`：声明当前在线 worker 真的能处理扫码流程。backend 发起 `adapter_login_qr_start` / `adapter_login_qr_wait` 前会检查这一层。
 
 ```js
 function emitWorkerReady(ws) {
@@ -110,7 +115,7 @@ function emitWorkerReady(ws) {
       execute_outbound: true,
 
       // 只有支持扫码登录的适配器才写这一项
-      login_qr: true,
+      supports_qr_login: true,
     },
   }))
 }
@@ -132,8 +137,9 @@ switch (message.aut_action) {
 
 要求：
 
-- 不支持扫码登录的适配器不要上报 `login_qr: true`。
-- 已上报 `login_qr: true` 的适配器必须能响应 `adapter_login_qr_start` 和 `adapter_login_qr_wait`。
+- 不支持扫码登录的适配器不要声明 `//[supports_qr_login: true]`，也不要上报 `supports_qr_login: true`。
+- 只声明 manifest 头注会显示入口，但不会让 backend 拉起扫码流程。
+- 已上报 `supports_qr_login: true` 的适配器必须能响应 `adapter_login_qr_start` 和 `adapter_login_qr_wait`。
 - 扫码成功后，`adapter_login_qr_wait` 可以返回 `account_config`，backend 会把账号配置写入适配器设置。
 
 ## 详细协议见参考页
