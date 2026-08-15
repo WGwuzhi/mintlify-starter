@@ -71,8 +71,8 @@
                     "directory": "card",
                     "expanded": true,
                     "pages": [
-                      "cn/plugin-sdk/adapter-development",
-                      "cn/plugin-sdk/adapter-reference"
+                      "cn/plugin-sdk/adapter-go",
+                      "cn/plugin-sdk/adapter-nodejs"
                     ],
                     "icon": "plug"
                   },
@@ -248,6 +248,14 @@
     }
   },
   "redirects": [
+    {
+      "source": "/cn/plugin-sdk/adapter-development",
+      "destination": "/cn/plugin-sdk/adapter"
+    },
+    {
+      "source": "/cn/plugin-sdk/adapter-reference",
+      "destination": "/cn/plugin-sdk/adapter"
+    },
     {
       "source": "/",
       "destination": "/cn"

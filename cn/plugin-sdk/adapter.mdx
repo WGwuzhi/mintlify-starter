@@ -1,32 +1,326 @@
 ---
 title: "autClaw 适配器总览"
-description: "从这里进入适配器开发规范和适配器参考，快速了解 autClaw 适配器的架构、最小落地路径和完整协议。"
-keywords: ["autClaw 适配器总览", "Adapter Gateway", "适配器开发", "适配器参考"]
+description: "了解适配器的接入形态、能力声明、manifest 头注和标准事件契约，然后选择 Go 或 Node.js 开发完整适配器。"
+keywords: ["autClaw 适配器", "适配器开发", "adapter_worker_ready", "AdapterEvent", "im_type", "manifest 头注"]
 icon: "plug"
 ---
 
-autClaw 适配器负责把外部 IM、机器人框架或官方 SDK 接入系统。先看这里，再进入开发规范或完整参考。
+autClaw 适配器负责把外部 IM 平台、机器人框架或官方 SDK 接入系统。适配器是 `plugin/adapters/` 下的单文件独立进程：autClaw 负责启动进程、下发配置和分发消息；你的适配器 worker 负责协议适配——解析账号、把平台事件转成标准事件、把标准发送动作转成平台协议包。
 
-## 你可以先做什么
+本页是语言无关的契约总览：接入形态、能力声明、manifest 头注、标准事件和出站动作。看完后进入对应语言篇章动手实现。
+
+## 选择开发语言
 
 <CardGroup cols={2}>
-  <Card title="适配器开发规范" icon="rocket" href="/cn/plugin-sdk/adapter-development">
-    看架构边界、最小落地路径和推荐接入模式。
+  <Card title="Go 适配器（推荐）" icon="cpu" href="/cn/plugin-sdk/adapter-go">
+    编译为原生二进制常驻运行，内存占用低；官方 SDK 封装了连接、握手、断线重连和并发控制。
   </Card>
-  <Card title="适配器参考" icon="book-open" href="/cn/plugin-sdk/adapter-reference">
-    看 control 信封、核心动作、媒体契约和完整示例。
+  <Card title="Node.js 适配器" icon="braces" href="/cn/plugin-sdk/adapter-nodejs">
+    直连 control 协议，无需编译；适合需要复用平台官方 npm SDK 或快速原型的场景。
   </Card>
 </CardGroup>
 
-## 先记住三件事
+<Tip>
+  优先选择 Go。适配器是 7×24 常驻进程，Go 二进制的常驻内存占用明显低于 Node.js 运行时，长期运行更稳定；`sdk/adaptersdk` 也替你处理了协议细节。只有当平台只有 JavaScript SDK、或你想快速验证时，才选择 Node.js。
+</Tip>
 
-- **worker** 负责协议适配。
-- **backend** 负责运行编排。
-- **协议专属逻辑** 只放在适配器 worker 内。
+## 先记住三条边界
 
-## 推荐阅读顺序
+- **worker** 负责协议适配：账号解析、入站标准化、出站构造、回执解码、登录和平台 workflow。
+- **autClaw** 负责运行编排：启动进程、下发配置、维护 control 连接、分发消息和记录回执。
+- **协议专属逻辑** 只放在适配器 worker 内，不要依赖 autClaw 核心层为单个渠道做特殊处理。
 
-1. [`适配器开发规范`](/cn/plugin-sdk/adapter-development)
-2. [`适配器参考`](/cn/plugin-sdk/adapter-reference)
-3. [`插件 manifest 声明头`](/cn/plugin-sdk/manifest)
+## 接入形态与能力
 
+worker 在上线时声明自己支持的能力，autClaw 按能力决定把哪些工作交给它。三种标准形态：
+
+| 形态 | 必须声明的能力 | 入站 | 出站 |
+|---|---|---|---|
+| 共享路由 codec 型（最小形态） | `resolve_account` + `normalize_inbound` + `build_outbound` + `decode_receipt`（四核心） | 平台推送到 `/api/{im_type}/receive` 或 Gateway WebSocket，autClaw 调 worker 解析账号并标准化 | autClaw 持有发送连接（`transport: "ws"`），worker 只构造协议包，回执走 `decode_receipt` |
+| 自发送 + 主动上报型 | 四核心 + `execute_outbound` + `emit_inbound_events` | worker 自己维护平台长轮询或 SDK 长连接，主动上报事件 | `build_outbound` 返回 `executor: "worker"`，autClaw 回调 worker 调平台 API 发送 |
+| raw ingress 型 | `open_ingress` | autClaw 原样转发 HTTP 回调（方法、路径、query、headers、body），worker 负责验签、解密、解析并拥有平台响应 | 按平台能力选 `execute_outbound` 或被动回复 |
+
+- 四核心能力缺一项，共享路由形态就不可用。
+- 声明 `open_ingress` 后，该 `im_type` 的 receive 路由整体切到原样转发，`resolve_account` / `normalize_inbound` 不再被调用。适合微信公众号这类回调必须验签或加解密的平台。
+
+可选能力与动作：
+
+| 能力或动作 | 说明 |
+|---|---|
+| `request_outbound` | worker 在平台 workflow 中主动让 autClaw 发送标准消息，例如自动同意好友后回复。 |
+| `supports_qr_login` | 扫码登录或扫码绑定账号。manifest 与 worker ready 需同时声明，且执行还要求四核心能力在位。 |
+| `adapter_update_account_state` | worker 主动上报账号在线状态。这是动作不是能力，无需声明，直接调用。 |
+
+## manifest 头注
+
+适配器放在 `plugin/adapters/`，文件顶部用注释头注声明元信息。推荐文件名 `adapter_{im_type}_{transport}` 加语言扩展名，例如 `adapter_demo_http.go`、`adapter_demo_ws.js`；autClaw 会根据文件名辅助推断路由，但关键字段仍应显式声明。
+
+```js
+//[title:adapter_demo_http]
+//[version:1.0.0]
+//[author: your-name]
+//[class:适配器]
+//[language: javascript]
+//[description: Demo IM HTTP adapter]
+//[im_type: demo]
+//[im_type_name: Demo IM]
+//[protocol: im]
+//[transport: http]
+//[account_id_key: bot_id]
+//[param: {"scope":"account","required":true,"key":"bot_id","name":"Bot ID","desc":"平台机器人账号 ID，同时作为 autClaw account_id"}]
+//[param: {"scope":"account","required":false,"key":"token","type":"secret","secret":true,"bind":"ingress_token","name":"上报 Token","desc":"平台回调或连接携带的验证 token"}]
+//[public: true]
+//[price: 0]
+```
+
+适配器专属字段：
+
+| 字段 | 示例 | 说明 |
+|---|---|---|
+| `im_type` | `demo` | 渠道稳定标识，必填。全小写，例如 `qq`、`tg`、`wxmp`。 |
+| `im_type_name` | `Demo IM` | 设置页展示名称。 |
+| `class` | `适配器` | 展示分类，约定写 `适配器`。识别适配器的依据是 `plugin/adapters/` 目录、`im_type` 等专属字段或 `adapter_` 文件名前缀。 |
+| `protocol` | `im` | 固定 `im`。 |
+| `language` | `golang` 或 `javascript` | 决定用哪种运行时启动进程。 |
+| `transport` | `http` 或 `ws` | 外部入站传输方式。 |
+| `adapter_route` | `demo` | 可选公开路由 key，缺省使用 `im_type`。 |
+| `account_id_key` | `bot_id` | 账号配置里用于生成 `account_id` 的字段。 |
+| `receive_token_key` | `token` | 外部平台请求携带鉴权 token 的 query 参数名；autClaw 也接受 `Authorization: Bearer` 头。 |
+| `supports_qr_login` | `true` | 声明适配器提供扫码登录入口，只影响设置页展示；见下方“扫码登录”。 |
+| `param` | JSON | 配置表单；账号级配置写 `"scope":"account"`，token 类配置可加 `"bind":"ingress_token"`。 |
+| `dependency` | `{"name":"ws"}` | 运行依赖（Node.js 适配器用；Go 适配器不需要）。 |
+| `media` | `{"requires_file_path":true}` | 只有本地 SDK 必须读取文件路径时才声明；见下方“媒体契约”。 |
+| `runtime` | `node@22.22.3` | 可选，显式指定运行时版本。 |
+
+Go 与 Node.js 的头注注释格式略有差异（Go 还需要构建约束行），见各语言篇章。未识别的字段不会报错，也不参与任何功能。`title`、`author`、`version`、`public`、`price` 等通用字段见 [`插件 manifest 声明头`](/cn/plugin-sdk/manifest)。
+
+## 生命周期与消息信封
+
+适配器进程通过 control websocket 与 autClaw 通讯，地址从环境变量 `AUTCLAW_ADAPTER_CONNECT_URL` 读取。生命周期固定为三步：
+
+<Steps>
+  <Step title="收到 adapter_init">
+    autClaw 在连接建立后下发配置：`account_configs`（每个账号带 `instance_id`，后续所有事件必须回填）、`global_config_values`、`common` 等。先缓存配置、重建账号索引，再进入下一步。
+  </Step>
+  <Step title="回发 adapter_worker_ready">
+    payload 必须携带 `"contract": "v3"` 和能力声明，否则 autClaw 直接关闭连接。能力按每次连接声明，autClaw 只认当前连接上报的能力。
+  </Step>
+  <Step title="处理业务调用">
+    响应 autClaw 发起的动作，或主动发起上报。断线后自动重连，重连会重新收到 `adapter_init`。
+  </Step>
+</Steps>
+
+control 上所有消息都是 JSON object，统一信封：
+
+```json
+{"aut_action": "adapter_codec_build_outbound", "aut_echo": "call_1", "aut_params": {}}
+```
+
+成功响应 `{"aut_echo": "call_1", "ok": true, "aut_params": {}}`；失败响应 `{"aut_echo": "call_1", "ok": false, "aut_error": "原因"}`。
+
+- 响应必须原样返回 `aut_echo`，不要带 `aut_action`。
+- `aut_params` 必须是对象，没有数据时返回 `{}`。
+- worker 内部异常必须捕获并转成失败响应，不能让连接崩溃。
+- worker 主动调用 autClaw 时自己生成 `aut_echo`、维护 pending 映射并设置超时；断线时所有 pending 立即失败。
+
+能力声明示例（`adapter_worker_ready.aut_params`）：
+
+```json
+{
+  "contract": "v3",
+  "resolve_account": true,
+  "normalize_inbound": true,
+  "build_outbound": true,
+  "decode_receipt": true,
+  "execute_outbound": false,
+  "supports_qr_login": false,
+  "emit_inbound_events": false,
+  "request_outbound": false,
+  "open_ingress": false
+}
+```
+
+## 标准事件
+
+所有入站路径（`normalize_inbound` 返回值、主动上报批次、raw ingress 结果）统一使用同一种事件结构：
+
+```json
+{
+  "kind": "message",
+  "event_type": "message",
+  "event_id": "728000001",
+  "dedupe_key": "update:728000001",
+  "im_type": "demo",
+  "instance_id": "inst_xxx",
+  "self_id": "1234567",
+  "occurred_at": 1765000000000,
+  "session": {"type": "group", "chat_id": "-100200300", "chat_name": "群名"},
+  "actor": {"id": "10001", "name": "Alice", "is_admin": false, "is_self": false},
+  "message": {
+    "message_id": "msg_1",
+    "chain": {
+      "items": [
+        {"type": "text", "text": "hello"},
+        {"type": "image", "source": "https://example.com/a.jpg", "name": "a.jpg", "mime_type": "image/jpeg"}
+      ]
+    }
+  },
+  "raw": {"account_id": "1234567", "raw_message": "hello"}
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `kind` | `message`、`notice`、`request`、`meta_event` 或 `payment`，决定 payload 分支。 |
+| `event_type` | 必填。平台事件类型，普通消息用 `message`。 |
+| `event_id` | 可选平台事件 ID。 |
+| `dedupe_key` | 可选去重 key（仅 message 事件参与去重）。上报重试时带同一 key 不会造成重复投递。 |
+| `im_type` | 必填，必须与当前适配器一致。 |
+| `instance_id` | 必填。账号实例 ID，来自 `adapter_init.account_configs[].instance_id`。 |
+| `self_id` | 可选。当前 bot 在平台上的账号 ID。 |
+| `session` | 会话身份：`type` 为 `private` 或 `group`；group 会话必须有 `chat_id`。 |
+| `actor` | 触发者：`id`、`name`、`avatar_url`、`is_admin`、`is_self`。`is_self: true` 的消息会被过滤，不分发给插件。 |
+| `occurred_at` | 可选 Unix 毫秒时间戳。 |
+| `message` | 仅 `kind: "message"`：`message_id` + 消息链 `chain`。 |
+| `detail` | `notice` / `request` / `meta_event` 的平台结构化内容（任意 JSON 对象）。 |
+| `raw` | 可选原始事件摘要，会成为插件可见的事件数据；建议放 `account_id`、`raw_message`。 |
+
+消息内容只写在 `message.chain.items` 里，段类型：`text`、`image`、`voice`、`video`、`file`、`at`、`reply`。文本段必须有 `text`；媒体段必须有 `source`（URL 或平台 file key）；`at` 段必须有 `target_id`；`reply` 段必须有 `reply_to_id`。任一事件缺必填字段，整批事件都会被拒绝。
+
+## 出站动作
+
+autClaw 把插件的发送请求转成标准动作，交给 worker 的 `build_outbound` 翻译成平台 payload：
+
+| 标准动作 | payload 约定 |
+|---|---|
+| `sendText` | `text`、`content` 或 `message` |
+| `sendMarkdown` | `markdown`，可兼容 `text` / `content` |
+| `sendImage` | `media: {"type":"image","source":"..."}` |
+| `sendVoice` | `media: {"type":"voice","source":"..."}` |
+| `sendVideo` | `media: {"type":"video","source":"..."}` |
+| `sendFile` | `media: {"type":"file","source":"...","name":"..."}` |
+| `sendMessage` | 混合消息：`items` 数组，元素与消息链段一致 |
+| `recall` / `recallMessage` | `message_id` |
+
+目标规则：群消息用 `session_type: "group"` + `chat_id`；私聊消息用 `session_type: "private"` + `user_id`。
+
+`build_outbound` 的返回决定发送方式：
+
+- `transport: "ws"`：由 autClaw 持有的发送连接发出；需要回执时把 `request_id` 写入平台 `echo` / `nonce` 字段，回执到达后 autClaw 调 `decode_receipt` 解码（返回 `matched`、`request_id`、`ok`、`data.message_id`；不是回执的 payload 返回 `{"matched": false}`）。
+- `executor: "worker"`：autClaw 回调 `adapter_execute_outbound`，worker 自己调平台 API 发送。响应有两层 `ok`：外层表示调用是否执行，`aut_params.ok` 表示平台发送是否成功。
+
+## 媒体契约
+
+插件发送媒体时，worker 从 `payload.media`（单媒体动作）或 `payload.items`（混合消息）读取：
+
+```json
+{"media": {"type": "voice", "source": "https://example.com/a.mp3", "name": "a.mp3", "mime_type": "audio/mpeg"}}
+```
+
+- **默认模式**：不要声明 `media` 头注。autClaw 会把本地文件转换成短时效临时 URL（约 60 秒）再传给 worker，worker 把 `source` 当 URL 处理并尽快取用，支持 `http://`、`https://`、`data:`、`base64://` 和平台 file key。
+- **本地路径模式**：声明 `//[media: {"requires_file_path":true}]` 后，autClaw 会物化文件并传 `file_path`。只有 worker 与 autClaw 在同一文件系统、且平台 SDK 必须读本地文件时才使用。
+- 文件发送保留 `name` 和 `mime_type`；不要把本地路径直接发给远端平台。
+
+## 扫码登录
+
+扫码登录分两层声明：
+
+- manifest 头注 `//[supports_qr_login: true]`：让设置页展示扫码入口，即使 worker 未上线。
+- `adapter_worker_ready` 里的 `supports_qr_login: true`：声明当前在线 worker 能执行扫码动作。autClaw 只检查这一层，且要求四核心能力同时在位。
+
+worker 需要处理两个动作。`adapter_login_qr_start` 生成二维码：
+
+```json
+{"session_key": "qr_session_1", "qr_code_url": "https://example.com/qr.png", "message": "用手机扫描二维码", "issued_at": 1783353600}
+```
+
+`adapter_login_qr_wait` 等待结果（请求带 `session_key` 和 `timeout_ms`）。未完成时返回 `{"connected": false, "status": "wait"}`；成功时返回账号配置：
+
+```json
+{
+  "connected": true,
+  "status": "confirmed",
+  "account_id": "bot_1",
+  "account_config": {"account_id": "bot_1", "alias": "主账号", "enabled": true, "schema_values": {"token": "***"}}
+}
+```
+
+autClaw 会把 `account_config` 持久化到适配器设置（与已有账号合并别名和配置，无默认账号时设为默认）。`status` 建议使用 `wait`、`scanned`、`confirmed`、`expired`、`error`。不支持扫码的适配器两层都不要声明。
+
+## worker 主动动作
+
+| 动作 | 何时使用 | 要点 |
+|---|---|---|
+| `adapter_emit_inbound_events` | worker 自己收到平台事件（长轮询、SDK 长连接） | 参数 `{"im_type": "...", "events": [...]}`；每个事件必须带 `instance_id`。高频事件分批限流。 |
+| `adapter_request_outbound` | 平台 workflow 中需要发送标准消息 | 用标准 `action` + 标准 `payload`，不要传平台原始字段；会重新走完整发送链路。 |
+| `adapter_update_account_state` | 登录成功、掉线、心跳、账号不可发送 | `account_id` 必填；`last_heartbeat` 用 RFC3339 UTC 时间；`meta` 只放非敏感字符串。 |
+
+`adapter_emit_inbound_events` 的响应是逐事件结果：
+
+```json
+{
+  "accepted": 2,
+  "rejected": 1,
+  "retryable": true,
+  "outcomes": [
+    {"index": 0, "status": "queued"},
+    {"index": 1, "status": "duplicate"},
+    {"index": 2, "status": "rejected", "reason": "queue_full"}
+  ]
+}
+```
+
+**游标规则**：`ok: true` 不等于全部入队。平台游标只能推进到第一个 `rejected` 之前，缺口必须重发、不得跳过；调用本身失败（超时、断线）表示整批未确认，必须整批重试。配合 `dedupe_key`，重试不会造成重复投递。`queued`、`waiter_consumed`、`filtered`、`duplicate` 都算已接受。
+
+## raw ingress（高级）
+
+平台回调必须由 worker 验签或加解密时（例如微信公众号），声明 `open_ingress` 能力。autClaw 把 HTTP 请求原样转发给 worker 的 `adapter_open_ingress`：
+
+```json
+{
+  "instance_id": "inst_xxx",
+  "request_id": "req_xxx",
+  "method": "POST",
+  "path": "/api/wxmp/receive/ing_abc",
+  "raw_query": "signature=...&timestamp=...",
+  "headers": {"Content-Type": ["text/xml"]},
+  "body_base64": "..."
+}
+```
+
+worker 返回验签结果、解析出的事件和平台 HTTP 响应：
+
+```json
+{
+  "verified": true,
+  "platform_account_id": "wx_appid",
+  "events": [],
+  "response": {"status": 200, "headers": {"Content-Type": ["text/xml"]}, "body_base64": "..."},
+  "response_mode": "passive"
+}
+```
+
+- `verified: false` 时 autClaw 返回 403，不产生任何副作用。
+- `response_mode` 为 `immediate`（立即应答）或 `passive`（被动回复：在平台被动窗口内等插件回复并编码进响应）。
+- 每个账号可在设置页拿到专属回调地址 `/api/{im_type}/receive/{ingress_id}`。
+- 请求与响应 body 上限 1 MiB；被动回复必须在平台时限内完成。
+
+## 发布前检查
+
+- 收到 `adapter_init` 后再处理平台业务消息；ready 声明了 `contract: "v3"`。
+- 所有带 `aut_echo` 的调用都能返回成功或失败；主动调用设置了超时并在断线时清理。
+- 事件带齐 `im_type`、`instance_id`；主动上报按 `outcomes` 推进游标。
+- 媒体优先使用 `source`；只有声明 `requires_file_path` 才读取 `file_path`。
+- 日志、`meta`、`raw` 不包含 token、密码、私钥、验证码或完整签名。
+- 实测私聊、群聊、媒体、撤回、掉线重连；支持扫码的再实测扫码流程。
+
+## 下一步
+
+<CardGroup cols={2}>
+  <Card title="Go 适配器开发" icon="cpu" href="/cn/plugin-sdk/adapter-go">
+    用官方 SDK 实现完整适配器，含最小骨架和测试方法。
+  </Card>
+  <Card title="Node.js 适配器开发" icon="braces" href="/cn/plugin-sdk/adapter-nodejs">
+    直连 control 协议实现完整适配器，含可运行的完整示例。
+  </Card>
+</CardGroup>

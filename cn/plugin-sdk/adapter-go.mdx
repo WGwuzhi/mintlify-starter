@@ -1,0 +1,207 @@
+---
+title: "Go 适配器开发"
+description: "用官方 adaptersdk 开发 autClaw Go 适配器：manifest 写法、Runner 生命周期、codec 动作实现、事件上报和本地测试。"
+keywords: ["Go 适配器", "adaptersdk", "worker.Runner", "AdapterEvent", "EmitInbound", "autclaw adapter"]
+icon: "cpu"
+---
+
+Go 是推荐的适配器开发语言：编译为原生二进制常驻运行，内存占用低；官方 SDK `sdk/adaptersdk` 封装了连接、`contract: "v3"` 握手、断线重连、pending 调用管理和并发控制，你只需要实现协议逻辑。
+
+<Note>
+  先读 [`适配器总览`](/cn/plugin-sdk/adapter) 了解接入形态、能力声明、manifest 头注和标准事件契约。本页只讲 Go 落地方法。完整实例可参考仓库内 `plugin/adapters/adapter_tg_http.go`（长轮询 + 自发送）与 `plugin/adapters/adapter_wxmp_http.go`（raw ingress 被动回复）。
+</Note>
+
+## 文件与 manifest
+
+Go 适配器是 `plugin/adapters/` 下的单文件 `package main` 程序。第一行必须是构建约束，命名约定 `autclaw_<im_type>_adapter`；随后是 `// [key: value]` 格式的 manifest 头注：
+
+```go
+//go:build autclaw_demo_adapter
+
+// [title:adapter_demo_http_go]
+// [version:1.0.0]
+// [author: your-name]
+// [class:适配器]
+// [language: golang]
+// [description: Demo IM 适配器]
+// [im_type: demo]
+// [im_type_name: Demo IM]
+// [protocol: im]
+// [transport: http]
+// [account_id_key: bot_id]
+// [param: {"scope":"account","required":true,"key":"bot_token","type":"secret","secret":true,"name":"Bot Token"}]
+// [public: true]
+// [price: 0]
+
+package main
+```
+
+`language: golang` 让 autClaw 用 Go 运行时构建并启动二进制；Go 适配器不需要 `dependency` 头注，依赖直接写在 import 里。各头注含义见 [`适配器总览`](/cn/plugin-sdk/adapter#manifest-头注)。
+
+## 引入 SDK
+
+```go
+import (
+    "github.com/WGwuzhi/autClaw/sdk/adaptersdk/contract"
+    sdk "github.com/WGwuzhi/autClaw/sdk/adaptersdk/worker"
+)
+```
+
+- `contract`：动作常量（`ActionResolveAccount` 等）与 wire 结构体（`AdapterEvent`、`MessageChain`、`Capabilities`、`AdmissionResult`），字段的 JSON tag 与协议逐项一致。
+- `worker`：control 生命周期（`Runner` / `Session`）与 `Message`（`map[string]any`）取值辅助（`Text`、`First`、`Object`、`Bool`、`SchemaValue`）。
+
+## 启动骨架
+
+```go
+func main() {
+    ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer cancel()
+    w := newDemoWorker()
+    runner, err := sdk.NewRunner(sdk.Config{
+        IMType: "demo",
+        Capabilities: contract.Capabilities{
+            ResolveAccount: true, NormalizeInbound: true,
+            BuildOutbound: true, DecodeReceipt: true,
+            ExecuteOutbound: true, EmitInboundEvents: true,
+        },
+        OnInit:   w.applyInit,   // 收到 adapter_init：重建账号快照
+        OnReady:  w.startLoops,  // ready 之后：启动绑定 session.Context() 的平台循环
+        OnDetach: w.stopLoops,   // 连接断开：停止平台循环
+        Handle:   w.handleAction,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    _ = runner.Run(ctx)
+}
+```
+
+`Runner.Run` 自动完成：从环境变量解析 control 地址、`adapter_init` 后回发带 `"contract":"v3"` 的 `adapter_worker_ready`、断线重连、按连接隔离 pending 调用、有界并发处理调用。你在 `OnInit` 里缓存 `account_configs`（记住每个账号的 `instance_id`），在 `OnReady` 里启动绑定 `session.Context()` 的平台循环——重连后旧循环随旧连接结束，新连接会重新触发 `OnReady`。
+
+## 实现 codec 动作
+
+`Handle` 处理 autClaw 发起的调用，按动作分发。返回的 `sdk.Message` 就是响应的 `aut_params`；返回 error 时 SDK 自动转成失败响应：
+
+```go
+func (w *demoWorker) handleAction(ctx context.Context, _ *sdk.Session, action string, params sdk.Message) (sdk.Message, error) {
+    switch action {
+    case contract.ActionResolveAccount:
+        // 从 params["headers"] / params["query"] / params["raw_payload"] 解析账号
+        return sdk.Message{"account_id": w.snapshot().defaultAccountID()}, nil
+    case contract.ActionNormalizeInbound:
+        // 把 params["raw_payload"] 转成标准事件数组
+        return sdk.Message{"events": w.normalize(params)}, nil
+    case contract.ActionBuildOutbound:
+        return w.buildOutbound(params)
+    case contract.ActionDecodeReceipt:
+        return sdk.Message{"matched": false}, nil
+    case contract.ActionExecuteOutbound:
+        return w.executeOutbound(ctx, params)
+    default:
+        return nil, fmt.Errorf("unsupported action: %s", action)
+    }
+}
+```
+
+`buildOutbound` 按标准动作翻译平台 payload，选择发送方式：
+
+```go
+func (w *demoWorker) buildOutbound(params sdk.Message) (sdk.Message, error) {
+    payload := sdk.Object(params["payload"])
+    switch sdk.Text(params["action"]) {
+    case "sendText":
+        target := sdk.First(params["chat_id"], params["user_id"])
+        return sdk.Message{
+            "executor":      contract.ExecutorWorker, // 由本 worker 自己发送
+            "await_receipt": false,
+            "raw_payload": sdk.Message{
+                "chat_id": target,
+                "text":    sdk.First(payload["text"], payload["content"], payload["message"]),
+            },
+        }, nil
+    default:
+        return nil, fmt.Errorf("unsupported action: %s", sdk.Text(params["action"]))
+    }
+}
+```
+
+## 构造标准事件
+
+用 `contract.AdapterEvent` 构造事件，内容写在消息链里。`im_type` 与 `instance_id` 必填，`instance_id` 来自 `adapter_init` 的账号配置：
+
+```go
+event := contract.AdapterEvent{
+    Kind:       contract.EventKindMessage,
+    EventType:  "message",
+    EventID:    updateID,
+    DedupeKey:  "update:" + updateID,
+    IMType:     "demo",
+    InstanceID: account.InstanceID,
+    SelfID:     account.ID,
+    Session:    contract.SessionIdentity{Type: contract.SessionTypePrivate},
+    Actor:      contract.UserIdentity{ID: userID, Name: userName},
+    Message: &contract.MessageEvent{
+        MessageID: updateID,
+        Chain: contract.MessageChain{Items: []contract.StructuredMessageItem{
+            {Type: contract.SegmentText, Text: text},
+        }},
+    },
+}
+```
+
+群消息把 `Session.Type` 设为 `contract.SessionTypeGroup` 并填 `ChatID`；媒体段用 `SegmentImage` / `SegmentVoice` 等并填 `Source`。
+
+## 主动上报与游标
+
+worker 自己维护平台连接时，在 `OnReady` 启动的循环里上报事件：
+
+```go
+func (w *demoWorker) pollLoop(session *sdk.Session, account demoAccount) {
+    ctx := session.Context() // 连接断开时 ctx 结束，循环随之退出
+    cursor := ""
+    for ctx.Err() == nil {
+        updates, err := w.fetchUpdates(ctx, account, cursor)
+        if err != nil || len(updates) == 0 {
+            continue
+        }
+        events := w.toEvents(account, updates)
+        result, err := session.EmitInbound(ctx, "demo", events, 0)
+        if err != nil {
+            continue // 调用失败：整批未确认，不推进游标，整批重试
+        }
+        if advance := result.AdvanceCount(len(events)); advance > 0 {
+            cursor = updates[advance-1].ID // 只越过已接受的前缀
+        }
+    }
+}
+```
+
+`AdvanceCount` 实现了游标规则：只推进到第一个 `rejected` 之前，缺口在下一轮重发；`dedupe_key` 保证重试不重复投递。
+
+其他主动动作用 `session.Call`，例如上报账号状态：
+
+```go
+_, _ = session.Call(ctx, contract.ActionUpdateAccountState, sdk.Message{
+    "im_type": "demo", "account_id": account.ID,
+    "status": "online", "sendable": true,
+    "last_heartbeat": time.Now().UTC().Format(time.RFC3339),
+}, 0)
+```
+
+## 扫码登录
+
+支持扫码的适配器在 `Capabilities` 里加 `SupportsQRLogin: true`（manifest 同时声明 `// [supports_qr_login: true]`），并在 `Handle` 里处理 `contract.ActionLoginQRStart` 与 `contract.ActionLoginQRWait`，返回字段见 [`适配器总览`](/cn/plugin-sdk/adapter#扫码登录)。
+
+## 本地测试
+
+构建约束会把适配器文件排除在常规包模式之外，测试必须显式列出文件，测试文件也要带相同的构建约束：
+
+```bash
+go test plugin/adapters/adapter_demo_http.go plugin/adapters/adapter_demo_http_test.go
+```
+
+建议覆盖：`adapter_init` 后配置读取（含 `instance_id`）、事件构造通过 `Validate()`、`build_outbound` 覆盖文本与媒体动作、`EmitInbound` 部分拒绝时的游标处理、`execute_outbound` 成功与失败路径。
+
+## 发布前检查
+
+按 [`适配器总览`](/cn/plugin-sdk/adapter#发布前检查) 的清单逐项确认。Go 适配器额外注意：平台 HTTP 调用设置超时；平台循环绑定 `session.Context()`，不要在连接断开后继续引用旧 session。
