@@ -79,7 +79,6 @@ Manifest headers 是插件文件顶部的注释声明。autClaw 读取这些声�
 | `account_id_key` | `bot_id` | 账号配置里用于生成 `account_id` 的字段。 |
 | `receive_token_key` | `token` | 外部平台请求里 token 的 query key。 |
 | `supports_qr_login` | `true` | 声明适配器提供扫码登录入口。它只影响设置页入口展示；真正发起扫码流程还要求当前 worker 在 `adapter_worker_ready.aut_params.supports_qr_login` 中同步声明运行时能力。 |
-| `media` | `{"requires_file_path":true}` | 只有本地 SDK 必须读取文件路径时才声明。 |
 
 ## 消息触发：rule
 
@@ -114,7 +113,7 @@ sender.reply(f"你要查询：{keyword}")
 
 | Header | 示例 | 作用 |
 |---|---|---|
-| `event` | `qq-notice-group_decrease-kick` | 监听事件。插件内用 `getEventType()` / `getEventData()` 读取事件信息。 |
+| `event` | `group.member.leave` | 监听规范事件名。插件内用 `getEventType()` / `getEventData()` 读取事件信息；名称见 [v6 事件契约](/cn/plugin-sdk/adapter#规范事件名与载荷)。 |
 | `cron` | `0 9 * * *` | 定时触发插件。 |
 
 `cron` 只能写一次。支持常见 5 段表达式，也支持带秒的表达式和 cron 描述符。

@@ -101,7 +101,7 @@ sender.reply(f"You want to query: {keyword}")
 
 | Header | Example | Purpose |
 |---|---|---|
-| `event` | `qq-notice-group_decrease-kick` | Listen for an event. Use `getEventType()` / `getEventData()` in the plugin. |
+| `event` | `group.member.leave` | Listen for a canonical event name. Use `getEventType()` / `getEventData()` in the plugin. |
 | `cron` | `0 9 * * *` | Trigger the plugin on a schedule. |
 
 Write `cron` only once. It supports common 5-field expressions, expressions with seconds, and cron descriptors.

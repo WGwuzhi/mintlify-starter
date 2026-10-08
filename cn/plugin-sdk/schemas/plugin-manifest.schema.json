@@ -103,13 +103,7 @@
     "receive_echo_key": { "type": "string" },
     "receive_token_key": { "type": "string" },
     "account_id_key": { "type": "string" },
-    "supports_qr_login": { "type": "boolean" },
-    "media": {
-      "oneOf": [
-        { "$ref": "#/$defs/adapterMediaPolicy" },
-        { "type": "string" }
-      ]
-    }
+    "supports_qr_login": { "type": "boolean" }
   },
   "required": ["author"],
   "$defs": {
@@ -167,13 +161,6 @@
         "version": { "type": "string" }
       },
       "required": ["name"]
-    },
-    "adapterMediaPolicy": {
-      "type": "object",
-      "additionalProperties": true,
-      "properties": {
-        "requires_file_path": { "type": "boolean" }
-      }
     }
   }
 }
