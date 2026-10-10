@@ -145,6 +145,10 @@ _ = advance
 
 通知、申请、撤回和支付使用 `contract` 专用结构，按 [规范事件表](/cn/plugin-sdk/adapter#规范事件名与载荷)填充。
 
+按 [入站标准化与日志](/cn/plugin-sdk/adapter#入站标准化与日志)在 worker 内解析提及、引用和媒体。使用 `contract.SegmentAt`、`SegmentAtAll`、`SegmentReply` 等常量构造消息段；引用上下文填写 `StructuredMessageItem.Reply`，类型为 `*contract.ReplyContext`，字段为 `SenderName`、`Text`。
+
+`MessageChain.PlainText()` 返回命令匹配文本，`MessageChain.Summary()` 返回与宿主共用的日志摘要。上报时传完整 `Chain`，由宿主生成这两种投影。
+
 ## 解析媒体与返回回执
 
 从 `payload.media` 或混合消息 `items[].media` 读取 `contract.MediaRef`。平台需要上传文件时，在当前 build 或 execute 内调用：

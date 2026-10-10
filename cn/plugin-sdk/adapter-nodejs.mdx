@@ -202,6 +202,8 @@ function advanceCount(result, total) {
 
 超时或断线时不推进游标，重试未确认批次；拒绝时停在缺口前，重试缺口与后续事件。保持事件 ID 和 `dedupe_key` 稳定。平台 ID 使用字符串，避免超过 JavaScript 安全整数范围。
 
+按 [入站标准化与日志](/cn/plugin-sdk/adapter#入站标准化与日志)在 worker 内解析提及、引用和媒体，写入 `message.chain.items`。提及使用 `{ type: 'at', target_id: botID }`；引用可附带 `reply: { sender_name: 'Alice', text: 'original' }`。宿主统一生成命令文本和日志摘要，无需在 Node.js worker 中复制摘要格式。
+
 ## 媒体与回执
 
 媒体使用 `MediaRef`。需要上传文件时，先检查 `session.hostCapabilities.media_resolve`，在当前 build 内调用：

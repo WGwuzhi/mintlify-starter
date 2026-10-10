@@ -178,12 +178,52 @@ ready 的 `aut_params`：
 | `text` | `text`。 |
 | `image`、`voice`、`video`、`file` | `media`，结构见下一节。 |
 | `at` | `target_id`。 |
-| `reply` | `reply_to_id`。 |
+| `reply` | `reply_to_id`；可选 `reply.sender_name` 和 `reply.text`，用于显示引用上下文。 |
 | `at_all` | 无额外字段。 |
 | `face`、`poke`、`json`、`forward`、`node`、`nodes` | `data`，非空 JSON 对象或数组。 |
 | `rps`、`dice`、`shake`、`share`、`contact`、`location`、`music`、`unknown` | `data`，保留平台组件字段的 JSON 对象或数组。 |
 
 `chain.options.text_mode` 可用 `auto`、`plain`、`markdown`。命令匹配文本只拼接 `text` 段，提及、引用和媒体不会混入命令文本。
+
+### 入站标准化与日志
+
+在适配器 worker 内把平台消息转换为标准消息链。autClaw 根据消息段统一生成命令文本和日志摘要；新平台使用已有标准消息段即可接入这条链路，无需增加后端平台分支。
+
+- 把平台提及标记转换为 `at` 或 `at_all`。如果平台回调隐含“提及机器人”，由 worker 补齐 `at`，并移除正文中的对应机器人标记。
+- 保留消息段顺序和文本原有空白。解析原始文本作为备用来源时，避免重复追加已存在的提及段。
+- 引用消息使用 `reply_to_id`。取得引用上下文后，可补充 `reply.sender_name`、`reply.text`；查询设置超时，失败时保留仅含 ID 的引用段。
+- 上报标准消息段，由宿主生成显示摘要。`raw` 用于保留平台信息，日志显示依赖 `message.chain.items`。
+
+例如，收到“@机器人 hello”和一张图片时，上报：
+
+```json
+{
+  "items": [
+    {"type":"at","target_id":"bot_1"},
+    {"type":"text","text":"hello"},
+    {"type":"image","media":{"source":{"kind":"http","value":"https://example.com/a.jpg"}}}
+  ]
+}
+```
+
+命令匹配文本为 `hello`，日志内容摘要为 `[At:bot_1] hello [图片]`。引用上下文示例：
+
+```json
+{"type":"reply","reply_to_id":"msg_0","reply":{"sender_name":"Alice","text":"original"}}
+```
+
+摘要格式对齐 AstrBot 的消息概要：按顺序显示各段，段与段之间插入一个空格，摘要保留文本段原有空白。
+
+| 消息段 | 摘要格式 |
+|---|---|
+| `text` | 原文本。 |
+| `at`、`at_all` | `[At:目标ID]`、`[At:全体成员]`。 |
+| `image`、`face` | `[图片]`、`[表情:编号]`。表情编号取 `data.id`。 |
+| `reply` | 有引用文本时为 `[引用消息(Alice: original)]`，否则为 `[引用消息]`。 |
+| `forward` | `[转发消息]`。 |
+| 其他标准组件 | 使用 AstrBot 的枚举占位符，例如语音 `[ComponentType.Record]`、视频 `[ComponentType.Video]`、文件 `[ComponentType.File]`、JSON `[ComponentType.Json]`。 |
+
+纯提及、引用或媒体消息也会显示内容摘要。适配器的用户消息日志隐藏自发消息和通知、心跳等非消息事件；这不影响它们按事件契约上报。外层日志字段、首尾空白处理和多行缩进沿用 autClaw 的格式。
 
 ## 媒体与宿主解析
 
@@ -321,6 +361,7 @@ worker 返回：
 
 - ready 包含 `contract: "v6"` 和两个能力数组，声明与实际实现一致。
 - 事件名称、专用载荷、账号实例和消息段均通过校验。
+- 覆盖提及加文本、纯提及、全体成员、引用上下文、媒体消息和备用解析去重，确认命令文本与日志摘要分别正确。
 - 每个调用有超时，断线清理 pending、平台循环和临时状态。
 - 覆盖部分拒绝、重复事件、部分发送失败、媒体准备和撤回。
 - 日志、`raw`、`meta` 和回执不泄露 token、密码或完整签名。
