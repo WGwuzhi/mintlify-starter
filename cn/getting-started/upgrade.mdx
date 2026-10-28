@@ -67,5 +67,5 @@ plugin/scripts/middleware/middleware.go
 ## 升级前检查
 
 - 不要删除 [持久化路径](/cn/getting-started/runtime-paths) 中的数据库、插件目录和运行时依赖目录。
-- 如果你只想更新 Docker 基座，使用 [autClaw Docker 运维命令](/cn/operations/docker) 拉取新镜像并重新创建容器。
+- 如果你只想更新 Docker 基座，使用 [Docker 运维与镜像版本](/cn/operations/docker) 拉取新镜像并重新创建容器。
 - 升级后如需排查问题，先用 `docker logs -f autclaw` 查看启动日志。

@@ -1,29 +1,57 @@
 ---
-title: "如何用 Docker 部署 autClaw"
-description: "按步骤在 Linux、飞牛 OS 或群晖 DSM 用 Docker bridge 网络部署 autClaw，映射 8200 端口并保留持久化目录。"
-keywords: ["autClaw 部署", "Docker 部署 autClaw", "Docker bridge", "飞牛 OS", "群晖 DSM"]
+title: "部署 autClaw"
+sidebarTitle: "部署"
+description: "用一键脚本或 Docker 部署 autClaw：支持直装版与 Docker，镜像分精简版和完整版，默认 8200 端口，数据保存在 /opt/autclaw。"
+keywords: ["autClaw 部署", "autClaw 一键安装", "Docker 部署 autClaw", "autclaw latest", "autclaw full", "飞牛 OS", "群晖 DSM"]
 icon: "rocket"
 ---
 
-本页说明如何用官方 Docker 镜像部署 autClaw。你会配置 `8200` 端口、持久化目录和常见 NAS 路径，避免后续升级或重建容器时丢失插件和数据。
+autClaw 有两种部署方式：**一键脚本**（推荐）和**手动 Docker**。两种方式都使用 `8200` 端口，数据默认放在 `/opt/autclaw`。
 
-## 准备
-
-- 已安装 Docker。
-- 确认宿主机 `8200` 端口未被占用。
-- 准备一个持久化目录，用来保存数据、插件和运行时依赖。
-
-## 选择部署方式
-
-| 场景 | 推荐方式 | 默认目录 |
+| 方式 | 适合谁 | 特点 |
 |---|---|---|
-| Linux 服务器 | Docker bridge | `/opt/autclaw` |
-| 飞牛 OS | Docker + 宿主机目录 | `/vol1/1000/docker/autclaw` |
-| 群晖 DSM | Docker + 宿主机目录 | `/volume1/docker/autclaw` |
+| 一键脚本 | 第一次部署、想少手动操作 | 自动下载、校验、安装并启动 |
+| 手动 Docker | 已有 Docker 或 NAS 环境 | 一条 `docker run` 命令 |
 
-## Linux 通用部署
+## 一键安装（推荐）
 
-默认使用 Docker bridge 网络，并把容器 `8200` 端口映射到宿主机 `8200`。
+在 Linux 服务器上执行：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/WGwuzhi/autClaw/main/install.sh)
+```
+
+脚本会自动通过 `sudo` 提权，然后按序号选择 4 项：
+
+1. **安装方式**：直装版 / Docker
+2. **安装目录**：默认 `/opt/autclaw`（Docker 模式下是宿主机数据目录）
+3. **是否安装 ffmpeg**：需要语音、视频转码时选“是”
+4. **访问端口**：默认 `8200`
+
+如果检测到群晖 DSM 或飞牛 fnOS，脚本会把 Docker 放在第一项，并自动推荐 NAS 数据目录。
+
+之后脚本会自动完成：
+
+- 检测 `amd64` / `arm64` 架构；
+- 自动选择最快的下载源，下载并校验最新版本；
+- 直装版安装 `mise`、运行产物和可选 ffmpeg，并注册 `autclaw` 服务；
+- Docker 模式拉取镜像，创建并启动容器；
+- 服务就绪后输出访问地址、日志和停止命令。
+
+安装完成后访问 `http://服务器IP:8200`。
+
+## 手动 Docker 部署
+
+### 1. 选镜像
+
+| 镜像 | 说明 |
+|---|---|
+| `nolan1121953/autclaw:latest` | 精简版（默认），不含 ffmpeg |
+| `nolan1121953/autclaw:full` | 完整版 = 精简版 + ffmpeg / libavcodec-extra |
+
+需要语音、视频转码（飞书、微信公众号、千寻）时用 `:full`。两个镜像都不含 Chromium，需要网页截图时见 [Docker 运维](/cn/operations/docker)。
+
+### 2. 启动
 
 ```bash
 docker run -d \
@@ -35,24 +63,24 @@ docker run -d \
   nolan1121953/autclaw:latest
 ```
 
-启动后访问：
+需要转码时，把最后的镜像名换成 `nolan1121953/autclaw:full`。
 
-```text
-http://服务器IP:8200
-```
+启动后访问 `http://服务器IP:8200`。首次启动需要几分钟，可以用 `docker logs -f autclaw` 查看进度。
 
-如果你在本机部署，也可以访问：
+### 3. 飞牛 OS / 群晖
 
-```text
-http://localhost:8200
-```
+和普通 Linux 的区别只是宿主机目录。一键脚本会自动识别并把它作为默认项；手动 Docker 时，把 `-v` 左边的路径换成下表对应目录：
 
-## 飞牛 OS 部署
+| 系统 | 常见宿主机目录 |
+|---|---|
+| 飞牛 OS | `/vol1/1000/docker/autclaw` |
+| 群晖 DSM | `/volume1/docker/autclaw` |
 
-通过 SSH 登录飞牛 OS 后执行。飞牛 OS 常见 Docker 配置目录为 `/vol1/1000/docker`；如果你的存储空间或用户编号不同，请替换命令左侧的宿主机路径。
+以飞牛为例：
 
 ```bash
 sudo mkdir -p /vol1/1000/docker/autclaw
+
 sudo docker run -d \
   --name autclaw \
   --restart unless-stopped \
@@ -62,74 +90,12 @@ sudo docker run -d \
   nolan1121953/autclaw:latest
 ```
 
-启动后访问：
+## 修改端口
 
-```text
-http://飞牛OS_IP:8200
-```
-
-## 群晖 DSM / Container Manager 部署
-
-通过 SSH 登录群晖后执行。常见持久化目录为 `/volume1/docker/autclaw`；如果你的共享文件夹在其他存储池，请替换为实际路径。
-
-```bash
-sudo mkdir -p /volume1/docker/autclaw
-sudo docker run -d \
-  --name autclaw \
-  --restart unless-stopped \
-  --network bridge \
-  -p 8200:8200 \
-  -v /volume1/docker/autclaw:/opt/autclaw \
-  nolan1121953/autclaw:latest
-```
-
-启动后访问：
-
-```text
-http://群晖_IP:8200
-```
-
-<Note>
-  如果你想换端口，例如宿主机 `18200` 映射到容器 `8200`，把 `-p 8200:8200` 改成 `-p 18200:8200`。
-</Note>
-
-## 查看日志
-
-```bash
-docker logs -f autclaw
-```
-
-## 重新创建容器
-
-```bash
-docker rm -f autclaw
-
-docker run -d \
-  --name autclaw \
-  --restart unless-stopped \
-  --network bridge \
-  -p 8200:8200 \
-  -v /opt/autclaw:/opt/autclaw \
-  nolan1121953/autclaw:latest
-```
-
-<Warning>
-  不要删除 `/opt/autclaw`、`/vol1/1000/docker/autclaw` 或 `/volume1/docker/autclaw`，除非你明确要清空数据、插件和运行时依赖。
-</Warning>
-
-## 常见问题
-
-### 我能把端口改成别的值吗？
-可以。把 `-p 8200:8200` 改成你想要的宿主机端口，例如 `-p 18200:8200`。
-
-### 重建容器时要保留什么？
-保留宿主机持久化目录，不要删除里面的数据库、插件和依赖。
-
-### Windows 能直接部署吗？
-当前文档面向 Linux 和 Docker 部署，Windows 不在支持范围内。
+把 `-p 8200:8200` 改成你要的宿主机端口即可，例如 `-p 18200:8200`。冒号右边的容器端口 `8200` 不要改。
 
 ## 下一步
 
-- 查看 [运行目录和持久化路径](/cn/getting-started/runtime-paths)，确认数据库、插件和依赖目录位置。
-- 使用 [autClaw Docker 运维命令](/cn/operations/docker) 查看日志、更新镜像或重新创建容器。
-- 需要升级应用版本时，按 [如何升级 autClaw](/cn/getting-started/upgrade) 使用 Web 控制台或 IM 命令。
+- 查看日志、更新镜像、切换精简版 / 完整版：[Docker 运维命令](/cn/operations/docker)
+- 确认数据库和插件目录：[运行目录和持久化路径](/cn/getting-started/runtime-paths)
+- 升级应用版本：[如何升级 autClaw](/cn/getting-started/upgrade)

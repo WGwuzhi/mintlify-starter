@@ -1,29 +1,56 @@
 ---
-title: "How to deploy autClaw with Docker"
-description: "Deploy autClaw with Docker bridge networking on Linux, Feiniu OS (FNOS), or Synology DSM, including the 8200 port mapping and persistent storage."
-keywords: ["autClaw deployment", "Docker deploy autClaw", "Docker bridge", "Feiniu OS", "Synology DSM"]
+title: "Deploy autClaw"
+description: "Deploy autClaw with the one-click script or Docker: direct or Docker install, slim and full images, port 8200, data in /opt/autclaw."
+keywords: ["autClaw deployment", "autClaw one-click install", "Docker deploy autClaw", "autclaw latest", "autclaw full", "Feiniu OS", "Synology DSM"]
 icon: "rocket"
 ---
 
-This guide shows how to deploy autClaw with the official Docker image. You will configure the `8200` port, persistent storage, and common NAS paths so plugins and data do not get lost during upgrades or container recreation.
+autClaw has two deployment paths: the **one-click script** (recommended) and **manual Docker**. Both use port `8200` and store data in `/opt/autclaw` by default.
 
-## Prepare
-
-- Install Docker.
-- Make sure host port `8200` is available.
-- Prepare a persistent directory for data, plugins, and runtime dependencies.
-
-## Choose a deployment path
-
-| Scenario | Recommended method | Default directory |
+| Path | Best for | What you get |
 |---|---|---|
-| Linux server | Docker bridge | `/opt/autclaw` |
-| Feiniu OS (FNOS) | Docker + host directory | `/vol1/1000/docker/autclaw` |
-| Synology DSM | Docker + host directory | `/volume1/docker/autclaw` |
+| One-click script | First-time install, minimal manual work | Downloads, verifies, installs, and starts for you |
+| Manual Docker | Existing Docker or NAS setup | One `docker run` command |
 
-## General Linux deployment
+## One-click install (recommended)
 
-Use Docker bridge networking by default and map container port `8200` to host port `8200`.
+Run this on a Linux server:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/WGwuzhi/autClaw/main/install.sh)
+```
+
+The script re-runs itself with `sudo` when needed, then asks you to pick 4 options:
+
+1. **Install mode**: direct / Docker
+2. **Install directory**: defaults to `/opt/autclaw` (the host data directory in Docker mode)
+3. **Install ffmpeg**: choose yes if you need audio or video transcoding
+4. **Access port**: defaults to `8200`
+
+If the script detects Synology DSM or Feiniu fnOS, it puts Docker first and recommends the NAS data directory.
+
+The script then handles the rest:
+
+- Detects `amd64` / `arm64`;
+- Picks the fastest download source, then downloads and verifies the latest version;
+- Direct mode installs `mise`, the runtime artifacts, and optional ffmpeg, then registers the `autclaw` service;
+- Docker mode pulls the image and starts the container;
+- Prints the URL, log command, and stop command once the service is ready.
+
+When it finishes, open `http://SERVER_IP:8200`.
+
+## Manual Docker deployment
+
+### 1. Pick an image
+
+| Image | Description |
+|---|---|
+| `nolan1121953/autclaw:latest` | Slim image (default), no ffmpeg |
+| `nolan1121953/autclaw:full` | Full image = slim + ffmpeg / libavcodec-extra |
+
+Use `:full` when you need audio or video transcoding (Feishu, WeChat Official Account, Qianxun). Neither image includes Chromium; for screenshots, see [Docker operations](/en/operations/docker).
+
+### 2. Start the container
 
 ```bash
 docker run -d \
@@ -35,24 +62,24 @@ docker run -d \
   nolan1121953/autclaw:latest
 ```
 
-After startup, open:
+For transcoding, change the last line to `nolan1121953/autclaw:full`.
 
-```text
-http://SERVER_IP:8200
-```
+Then open `http://SERVER_IP:8200`. The first start takes a few minutes; follow progress with `docker logs -f autclaw`.
 
-If you deploy locally, you can also open:
+### 3. Feiniu OS / Synology
 
-```text
-http://localhost:8200
-```
+Only the host directory differs. The one-click script detects it and uses the directory below by default; for manual Docker, replace the left side of `-v` with the matching path:
 
-## Deploy on Feiniu OS (FNOS)
+| System | Common host directory |
+|---|---|
+| Feiniu OS (FNOS) | `/vol1/1000/docker/autclaw` |
+| Synology DSM | `/volume1/docker/autclaw` |
 
-SSH into Feiniu OS and run the command below. A common Docker config directory on Feiniu OS is `/vol1/1000/docker`. If your storage pool or user ID is different, replace the host path on the left side of `-v`.
+For example, on Feiniu:
 
 ```bash
 sudo mkdir -p /vol1/1000/docker/autclaw
+
 sudo docker run -d \
   --name autclaw \
   --restart unless-stopped \
@@ -62,75 +89,12 @@ sudo docker run -d \
   nolan1121953/autclaw:latest
 ```
 
-After startup, open:
+## Change the port
 
-```text
-http://FEINIU_OS_IP:8200
-```
-
-## Deploy on Synology DSM / Container Manager
-
-SSH into Synology and run the command below. A common persistent directory is `/volume1/docker/autclaw`. If your shared folder is on another storage pool, replace it with the actual path.
-
-```bash
-sudo mkdir -p /volume1/docker/autclaw
-sudo docker run -d \
-  --name autclaw \
-  --restart unless-stopped \
-  --network bridge \
-  -p 8200:8200 \
-  -v /volume1/docker/autclaw:/opt/autclaw \
-  nolan1121953/autclaw:latest
-```
-
-After startup, open:
-
-```text
-http://SYNOLOGY_IP:8200
-```
-
-
-<Note>
-  To change the port, for example mapping host port `18200` to container port `8200`, change `-p 8200:8200` to `-p 18200:8200`.
-</Note>
-
-## View logs
-
-```bash
-docker logs -f autclaw
-```
-
-## Recreate the container
-
-```bash
-docker rm -f autclaw
-
-docker run -d \
-  --name autclaw \
-  --restart unless-stopped \
-  --network bridge \
-  -p 8200:8200 \
-  -v /opt/autclaw:/opt/autclaw \
-  nolan1121953/autclaw:latest
-```
-
-<Warning>
-  Do not delete `/opt/autclaw`, `/vol1/1000/docker/autclaw`, or `/volume1/docker/autclaw` unless you explicitly want to clear data, plugins, and runtime dependencies.
-</Warning>
-
-## Common questions
-
-### Can I change the port?
-Yes. Change `-p 8200:8200` to the host port you want, such as `-p 18200:8200`.
-
-### What should I keep when I recreate the container?
-Keep the host persistent directory. Do not delete the database, plugins, or dependencies inside it.
-
-### Can I deploy this on Windows?
-The current docs target Linux and Docker deployments. Windows is not supported.
+Change `-p 8200:8200` to the host port you want, for example `-p 18200:8200`. Keep the container port on the right side at `8200`.
 
 ## Next steps
 
-- Review [runtime directories and paths](/en/getting-started/runtime-paths) for database, plugin, and dependency locations.
-- Use [autClaw Docker operations](/en/operations/docker) to view logs, update images, or recreate the container.
-- When you need an application upgrade, follow [How to upgrade autClaw](/en/getting-started/upgrade).
+- View logs, update the image, or switch between slim and full: [Docker operations](/en/operations/docker)
+- Check the database and plugin directories: [Runtime directories and paths](/en/getting-started/runtime-paths)
+- Upgrade the application: [How to upgrade autClaw](/en/getting-started/upgrade)

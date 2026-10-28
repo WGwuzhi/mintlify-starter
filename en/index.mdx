@@ -5,13 +5,13 @@ keywords: ["autClaw docs", "autClaw deployment", "Docker deployment", "bot plugi
 icon: "bot"
 ---
 
-autClaw is a self-hosted bot and plugin runtime platform. After you deploy it on Linux or Docker, you can connect IM accounts, install plugins, and handle messages, payment events, HTTP routes, and scheduled tasks from the web console.
+autClaw is a self-hosted bot and plugin runtime platform. Deploy it on Linux with the one-click script or Docker, then connect IM accounts, install plugins, and handle messages, payment events, HTTP routes, and scheduled tasks from the web console.
 
 ## What is autClaw?
 
 autClaw is designed for local deployment, persistent data, and extensible plugins. The Docker image provides a stable runtime base. By default, the app, frontend assets, plugin directory, and runtime dependencies are persisted under `/opt/autclaw`.
 
-If Docker is ready, follow [How to deploy autClaw with Docker](/en/getting-started/deploy) to start the service.
+To see what it can do, read [the autClaw feature overview](/en/features). Ready to start? Follow [Deploy autClaw](/en/getting-started/deploy).
 
 ## Key facts
 
@@ -21,12 +21,12 @@ If Docker is ready, follow [How to deploy autClaw with Docker](/en/getting-start
 | Default persistent directory | `/opt/autclaw` |
 | Plugin languages | JavaScript, Python |
 | Common triggers | `rule`, `event`, `router`, `cron` |
-| Official image | `nolan1121953/autclaw:latest` |
+| Official images | `nolan1121953/autclaw:latest` (slim) / `:full` (full) |
 | Common deployment environments | Linux, Feiniu OS (FNOS), Synology DSM |
 
 <CardGroup cols={2}>
   <Card title="Deploy autClaw" icon="rocket" href="/en/getting-started/deploy">
-    Start the official Docker image and open `http://SERVER_IP:8200`.
+    Start the service with the one-click script or Docker, then open `http://SERVER_IP:8200`.
   </Card>
   <Card title="Upgrade and restart" icon="refresh-cw" href="/en/getting-started/upgrade">
     Use online updates or pull a new image without losing the runtime directory.
@@ -48,11 +48,17 @@ If Docker is ready, follow [How to deploy autClaw with Docker](/en/getting-start
 ## Common commands
 
 ```bash
-# Start
+# One-click install (recommended)
+bash <(curl -fsSL https://raw.githubusercontent.com/WGwuzhi/autClaw/main/install.sh)
+
+# Manual start with the slim image
 docker run -d --name autclaw --restart unless-stopped --network bridge \
   -p 8200:8200 \
   -v /opt/autclaw:/opt/autclaw \
   nolan1121953/autclaw:latest
+
+# For audio/video transcoding, use
+# nolan1121953/autclaw:full
 
 # View logs
 docker logs -f autclaw
@@ -75,11 +81,11 @@ No. The current docs target Linux and Docker deployments.
 They all live under `/opt/autclaw`, including the database, `plugin/`, `dist/`, `envs/mise`, and `envs/packages`.
 
 ### Which page should I read first?
-Start with [How to deploy autClaw with Docker](/en/getting-started/deploy), then read [runtime directories and paths](/en/getting-started/runtime-paths), and finish with [the plugin SDK overview](/en/plugin-sdk/overview).
+Start with [Deploy autClaw](/en/getting-started/deploy), then read [runtime directories and paths](/en/getting-started/runtime-paths), and finish with [the plugin SDK overview](/en/plugin-sdk/overview).
 
 ## Next steps
 
-- Start the service with [How to deploy autClaw with Docker](/en/getting-started/deploy).
+- Start the service with [Deploy autClaw](/en/getting-started/deploy).
 - Review [runtime directories and paths](/en/getting-started/runtime-paths) before moving data or recreating containers.
 - If you are comparing AstrBot or autMan (fanli), read [platform compare](/en/getting-started/comparison) first.
 - Use the [plugin SDK overview](/en/plugin-sdk/overview) to build JavaScript or Python plugins.

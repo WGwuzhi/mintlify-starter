@@ -5,9 +5,11 @@ keywords: ["Chromium Chinese fonts", "CJK locale", "autClaw screenshots", "brows
 icon: "languages"
 ---
 
-If you do not use Docker and run a release or build artifact directly, browser scripts, screenshots, and `chromedp` tasks depend on the host for Chromium language packs, CJK fonts, and the `zh_CN.UTF-8` locale.
+This page covers running a release or build artifact directly on the host. Browser scripts, screenshots, and `chromedp` tasks then depend on the host for Chromium language packs, CJK fonts, and the `zh_CN.UTF-8` locale.
 
-The Docker image already includes the common runtime environment. Use this page only when you run autClaw directly on the host and screenshots, browser scripts, or rendered pages show Chinese boxes, mojibake, or missing glyphs.
+<Note>
+  The Docker images do not include Chromium. If you use Docker, install it inside the container as described in [Docker operations](/en/operations/docker).
+</Note>
 
 ## One-click install on Debian / Ubuntu
 

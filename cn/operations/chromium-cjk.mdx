@@ -5,9 +5,11 @@ keywords: ["Chromium 中文字体", "CJK locale", "autClaw 截图", "浏览器�
 icon: "languages"
 ---
 
-如果你不用 Docker，而是直接运行 release / 编译产物，浏览器、网页截图和 `chromedp` 相关脚本能否正常显示中文，取决于宿主机是否安装 Chromium 中文语言包、CJK 字体和 `zh_CN.UTF-8` locale。
+本页适用于直接在宿主机运行 release / 编译产物的情况。浏览器、网页截图和 `chromedp` 相关脚本能否正常显示中文，取决于宿主机是否安装 Chromium 中文语言包、CJK 字体和 `zh_CN.UTF-8` locale。
 
-Docker 镜像已经内置常用运行环境。只有在宿主机直接运行 autClaw，且截图、浏览器脚本或页面渲染出现中文方块、乱码或缺字时，才需要按本页安装。
+<Note>
+  Docker 镜像不包含 Chromium。Docker 用户请在容器内按需安装，见 [Docker 运维](/cn/operations/docker)。
+</Note>
 
 ## Debian / Ubuntu 一键安装
 

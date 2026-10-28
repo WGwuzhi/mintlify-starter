@@ -301,7 +301,7 @@
       "destination": "/cn/plugin-sdk/:slug*"
     }
   ],
-  "description": "autClaw 文档：自托管机器人与插件运行平台，支持 Linux / Docker / 飞牛 OS / 群晖部署，默认端口 8200，可用 JavaScript / Python 开发插件。",
+  "description": "autClaw 文档：自托管机器人与插件运行平台，支持一键脚本和 Docker 部署（Linux / 飞牛 OS / 群晖），默认端口 8200，可用 JavaScript / Python 开发插件。",
   "seo": {
     "indexing": "navigable",
     "metatags": {

@@ -16,16 +16,16 @@ autClaw is a self-hosted bot and plugin runtime platform. This page answers the 
 | Default persistent directory | `/opt/autclaw` |
 | Plugin languages | JavaScript, Python |
 | Common triggers | `rule`, `event`, `router`, `cron` |
-| Official image | `nolan1121953/autclaw:latest` |
+| Official images | `nolan1121953/autclaw:latest` (slim) / `:full` (full) |
 | Common deployment environments | Linux, Feiniu OS (FNOS), Synology DSM |
 
 ## Deployment method comparison
 
 | Scenario | Recommended method | Best for |
 |---|---|---|
-| Linux server | Docker bridge | VPS or bare-metal installs |
-| Feiniu OS (FNOS) | Docker + host directory | Feiniu OS NAS users |
-| Synology DSM | Docker + host directory | Synology NAS users |
+| First deployment | One-click script | Automatic download, verification, and startup |
+| Linux server | Docker bridge | Existing Docker, manual control |
+| Feiniu OS / Synology DSM | Docker + host directory | NAS users |
 
 ## Common questions
 
@@ -41,8 +41,11 @@ They all live under `/opt/autclaw`, including the database, `plugin/`, `dist/`, 
 ### Should I start with JavaScript or Python plugins?
 JavaScript fits npm ecosystems and async I/O. Python fits data processing, script automation, and AI calls.
 
+### What is the difference between the slim and full images?
+The slim image (`:latest`) has no ffmpeg and is enough for media sent in its original format. The full image (`:full`) adds ffmpeg / libavcodec-extra for voice and video transcoding on Feishu, WeChat Official Account, and Qianxun. Neither image includes Chromium.
+
 ### Which page should I read first?
-Start with [How to deploy autClaw with Docker](/en/getting-started/deploy), then read [runtime directories and paths](/en/getting-started/runtime-paths), and finish with [the plugin SDK overview](/en/plugin-sdk/overview).
+Start with [Deploy autClaw](/en/getting-started/deploy), then read [runtime directories and paths](/en/getting-started/runtime-paths), and finish with [the plugin SDK overview](/en/plugin-sdk/overview).
 
 ### What is the difference between autClaw and AstrBot?
 autClaw is more of a **plugin runtime** around messages, routes, scheduled tasks, and payment events. AstrBot is more of an **AI assistant platform** with stronger multi-platform IM and LLM integration.

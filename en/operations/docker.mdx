@@ -1,11 +1,29 @@
 ---
-title: "autClaw Docker operations"
-description: "Use Docker and Docker Compose to view autClaw logs, restart, remove, and update the container on Linux, Feiniu OS (FNOS), or Synology DSM."
-keywords: ["autClaw Docker", "Docker Compose", "view logs", "update container", "Feiniu OS Docker"]
+title: "Docker operations and image variants"
+sidebarTitle: "Docker operations"
+description: "View autClaw logs, update the image, switch between the slim and full images, and add ffmpeg or Chromium on demand."
+keywords: ["autClaw Docker", "autclaw latest", "autclaw full", "update container", "view logs", "ffmpeg", "Chromium", "Docker Compose"]
 icon: "container"
 ---
 
-Use this page for daily container maintenance after autClaw is deployed. You can view logs, recreate the container, pull the latest image, or use Docker Compose to manage persistent directories on Feiniu OS (FNOS) and Synology DSM.
+After deployment, day-to-day maintenance is mostly logs, image updates, and switching image variants. Data lives in `/opt/autclaw`, so recreating the container with a different image does not lose it.
+
+## The two images
+
+| Image | Description |
+|---|---|
+| `nolan1121953/autclaw:latest` | Slim image (default), no ffmpeg |
+| `nolan1121953/autclaw:full` | Full image = slim + ffmpeg / libavcodec-extra |
+
+The ffmpeg in the full image handles audio and video transcoding:
+
+- Feishu: voice to Opus, video to MP4
+- WeChat Official Account: voice to AMR, AMR to WAV
+- Qianxun: voice to AMR, video to MP4
+
+QQ, Telegram, and the official WeChat Bot send media in its original format, so the slim image is enough.
+
+Neither image includes Chromium. If you need web screenshots, install it temporarily as shown below.
 
 ## View logs
 
@@ -13,13 +31,16 @@ Use this page for daily container maintenance after autClaw is deployed. You can
 docker logs -f autclaw
 ```
 
-## Stop and remove the container
+## Stop or remove the container
 
 ```bash
-docker rm -f autclaw
+docker stop autclaw    # stop
+docker rm -f autclaw   # stop and remove
 ```
 
-## Update to the latest image
+Removing the container does not delete the data in `/opt/autclaw`.
+
+## Update the image
 
 ```bash
 docker pull nolan1121953/autclaw:latest
@@ -33,34 +54,98 @@ docker run -d \
   nolan1121953/autclaw:latest
 ```
 
+Upgrading the autClaw application does not require recreating the container. Use **System upgrade** in the top-right corner of the web console instead; see [How to upgrade autClaw](/en/getting-started/upgrade).
+
+## Switch between slim and full
+
+Only the image name changes; keep the same volume:
+
+```bash
+docker rm -f autclaw
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /opt/autclaw:/opt/autclaw \
+  nolan1121953/autclaw:full
+```
+
+Change the image back to `:latest` to return to the slim image.
+
+## Add ffmpeg temporarily
+
+If you want to try transcoding on the slim image, install ffmpeg inside the running container. It takes effect immediately:
+
+```bash
+docker exec -it autclaw bash -lc \
+  'apt-get update && apt-get install -y --no-install-recommends ffmpeg libavcodec-extra && rm -rf /var/lib/apt/lists/*'
+```
+
+<Warning>
+  Packages installed this way are lost when the container is recreated or the image is updated. For long-term use, switch to `:full` or build your own image.
+</Warning>
+
+## Web screenshots (Chromium)
+
+Chromium is about 300MB, and the full dependency tree usually pushes it past 400MB, so neither image bundles it. Install it when needed:
+
+```bash
+docker exec -it autclaw bash -lc \
+  'apt-get update && apt-get install -y --no-install-recommends chromium fonts-wqy-zenhei && rm -rf /var/lib/apt/lists/*'
+```
+
+Chinese text needs a font: `fonts-wqy-zenhei` is about 16MB and covers common characters; `fonts-noto-cjk` is about 91MB and has broader coverage.
+
+The container runs as root by default, so Chromium must be started with `--no-sandbox`. Without it you will see `Running as root without --no-sandbox is not supported`; add the flag in your plugin (chromedp: `chromedp.Flag("no-sandbox", true)`).
+
+## Long-term option: build your own image
+
+Bake the dependencies into the image so they survive container recreation. If you only need transcoding, use `:full` directly and skip the build. If you need transcoding plus screenshots, build your own image:
+
+```dockerfile
+FROM nolan1121953/autclaw:latest
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ffmpeg libavcodec-extra \
+      chromium fonts-wqy-zenhei && \
+    rm -rf /var/lib/apt/lists/*
+```
+
+```bash
+docker build -t autclaw:media .
+docker rm -f autclaw
+docker run -d \
+  --name autclaw \
+  --restart unless-stopped \
+  --network bridge \
+  -p 8200:8200 \
+  -v /opt/autclaw:/opt/autclaw \
+  autclaw:media
+```
+
 ## Use Docker Compose
 
-```bash
-AUTCLAW_HOST_DATA_DIR=/opt/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
+Save the following as `compose.yaml`, then run `docker compose up -d`:
+
+```yaml
+services:
+  autclaw:
+    image: nolan1121953/autclaw:latest
+    container_name: autclaw
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    volumes:
+      - /opt/autclaw:/opt/autclaw
 ```
 
-Optional environment variables:
-
-| Variable | Description |
-|---|---|
-| `AUTCLAW_HOST_DATA_DIR` | Host persistent directory. `/opt/autclaw` is recommended by default. |
-| `AUTCLAW_HTTP_PORT` | Host access port. Defaults to `8200`. |
-| `AUTCLAW_IMAGE` | Custom image. Defaults to `nolan1121953/autclaw:latest`. |
-
-## Feiniu OS (FNOS) compose example
-
-```bash
-AUTCLAW_HOST_DATA_DIR=/vol1/1000/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
-```
-
-## Synology compose example
-
-```bash
-AUTCLAW_HOST_DATA_DIR=/volume1/docker/autclaw AUTCLAW_HTTP_PORT=8200 docker compose up -d
-```
+- Change variants: set `image` to `nolan1121953/autclaw:full`.
+- Change directories: replace `/opt/autclaw` on the left side of `volumes` with your NAS path.
+- Change ports: replace the host port on the left side of `"8200:8200"`.
 
 ## Related docs
 
-- For first-time installation, follow [How to deploy autClaw with Docker](/en/getting-started/deploy).
-- To understand persistent paths, read [autClaw runtime directories and paths](/en/getting-started/runtime-paths).
-- For in-app upgrades, read [How to upgrade autClaw](/en/getting-started/upgrade).
+- First-time install: [Deploy autClaw](/en/getting-started/deploy)
+- Persistent paths: [Runtime directories and paths](/en/getting-started/runtime-paths)
+- In-app upgrades: [How to upgrade autClaw](/en/getting-started/upgrade)

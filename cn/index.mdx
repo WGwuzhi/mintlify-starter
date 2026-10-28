@@ -5,13 +5,13 @@ keywords: ["autClaw 文档", "autClaw 部署", "Docker 部署", "机器人插件
 icon: "bot"
 ---
 
-autClaw 是一个自托管的机器人与插件运行平台。你把服务部署到 Linux 或 Docker 后，就可以在 Web 控制台接入 IM 账号、安装插件、处理消息、支付事件、HTTP 路由和定时任务。
+autClaw 是一个自托管的机器人与插件运行平台。你可以用一键脚本或 Docker 部署到 Linux，然后在 Web 控制台接入 IM 账号、安装插件、处理消息、支付事件、HTTP 路由和定时任务。
 
 ## autClaw 是什么
 
 autClaw 面向需要本地部署、数据持久化和可编写插件的场景。Docker 镜像提供稳定运行基座，应用本体、前端资源、插件目录和运行时依赖默认持久化到 `/opt/autclaw`。
 
-想先了解能力范围，查看 [autClaw 功能概览](/cn/features)。已经准备好 Docker 时，直接按 [如何用 Docker 部署 autClaw](/cn/getting-started/deploy) 启动服务。
+想先了解能力范围，查看 [autClaw 功能概览](/cn/features)。想马上开始，直接按 [部署 autClaw](/cn/getting-started/deploy) 启动服务。
 
 ## 关键事实
 
@@ -21,12 +21,12 @@ autClaw 面向需要本地部署、数据持久化和可编写插件的场景。
 | 默认持久化目录 | `/opt/autclaw` |
 | 插件语言 | JavaScript、Python |
 | 常见触发 | `rule`、`event`、`router`、`cron` |
-| 官方镜像 | `nolan1121953/autclaw:latest` |
+| 官方镜像 | `nolan1121953/autclaw:latest`（精简版）/ `:full`（完整版） |
 | 常见部署环境 | Linux、飞牛 OS、群晖 DSM |
 
 <CardGroup cols={2}>
   <Card title="部署 autClaw" icon="rocket" href="/cn/getting-started/deploy">
-    使用官方 Docker 镜像启动服务，访问 `http://服务器IP:8200`。
+    用一键脚本或 Docker 启动服务，访问 `http://服务器IP:8200`。
   </Card>
   <Card title="升级和重启" icon="refresh-cw" href="/cn/getting-started/upgrade">
     拉取新镜像或使用在线更新，保持运行目录不丢失。
@@ -48,11 +48,17 @@ autClaw 面向需要本地部署、数据持久化和可编写插件的场景。
 ## 常用命令
 
 ```bash
-# 启动
+# 一键安装（推荐）
+bash <(curl -fsSL https://raw.githubusercontent.com/WGwuzhi/autClaw/main/install.sh)
+
+# 手动启动精简版
 docker run -d --name autclaw --restart unless-stopped --network bridge \
   -p 8200:8200 \
   -v /opt/autclaw:/opt/autclaw \
   nolan1121953/autclaw:latest
+
+# 需要音视频转码时，把镜像换成
+# nolan1121953/autclaw:full
 
 # 查看日志
 docker logs -f autclaw
